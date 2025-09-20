@@ -1,0 +1,5 @@
+{
+  "name": "AI Storyboard Generator",
+  "description": "Generate a sequence of photorealistic images from a story, ensuring characters maintain a consistent visual appearance using the Identity Anchor method with Gemini.",
+  "requestFramePermissions": []
+}
