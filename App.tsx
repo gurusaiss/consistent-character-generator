@@ -10,13 +10,23 @@ const App: React.FC = () => {
   const [characters, setCharacters] = useState<Character[]>([
     {
       id: crypto.randomUUID(),
-      name: '',
-      description: '',
+      name: 'Elara',
+      description: 'A young woman with warm brown eyes and a determined gaze, often seen wearing practical travel clothes.',
+      baseImage: { file: null, base64: '', mimeType: '', previewUrl: '' },
+    },
+    {
+      id: crypto.randomUUID(),
+      name: 'Kael',
+      description: 'A rugged man with a short beard and a kind but serious expression. A skilled protector and guide.',
       baseImage: { file: null, base64: '', mimeType: '', previewUrl: '' },
     },
   ]);
   const [story, setStory] = useState(
-    'Elara stands on a cliff overlooking a stormy sea.\nKael, with his rugged beard, finds Elara on the cliff and offers her a warm cloak.'
+`Elara, with her determined gaze, looks out from a high castle window.
+Kael, his rugged beard visible in the torchlight, approaches Elara from behind.
+A close-up of Elara's hand, holding a crumpled, ancient map.
+Kael places a comforting hand on Elara's shoulder.
+They both study the map, spread out on a heavy oak table.`
   );
   const [results, setResults] = useState<SceneResult[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -69,6 +79,7 @@ const App: React.FC = () => {
     }));
     setResults(initialResults);
 
+    // Generate images sequentially to show progress and avoid overwhelming the API
     for (let i = 0; i < scenes.length; i++) {
       try {
         const imageUrl = await generateSceneImage(scenes[i], characters);
@@ -129,8 +140,9 @@ const App: React.FC = () => {
                 value={story}
                 onChange={(e) => setStory(e.target.value)}
                 placeholder="Enter each scene on a new line..."
-                rows={8}
+                rows={12}
                 className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white placeholder-gray-500 focus:ring-green-500 focus:border-green-500"
+                aria-label="Story scenes"
               />
             </div>
 
@@ -140,7 +152,7 @@ const App: React.FC = () => {
                 disabled={isGenerating || !story.trim()}
                 className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors"
               >
-                {isGenerating ? 'Generating...' : 'Generate Image Sequence'}
+                {isGenerating ? 'Generating...' : 'Generate Storyboard'}
               </button>
             </div>
           </div>
@@ -149,7 +161,7 @@ const App: React.FC = () => {
           <div className="bg-gray-800/50 p-6 rounded-xl border border-gray-700">
             <h2 className="text-2xl font-bold mb-4 text-white">Generated Storyboard</h2>
             {results.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
                 {results.map((result) => (
                   <SceneOutput key={result.id} result={result} />
                 ))}
