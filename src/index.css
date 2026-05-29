@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #07071a;
+  --card: #0f0f2a;
+}
+
+body {
+  background-color: var(--bg);
+  color: #f1f5f9;
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f0f2a;
+}
+::-webkit-scrollbar-thumb {
+  background: #7c3aed55;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7c3aed99;
+}
+
+/* Glass card utility */
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+}
+
+/* Gradient text utility */
+.gradient-text {
+  background: linear-gradient(to right, #a78bfa, #c084fc, #22d3ee);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow button */
+.btn-primary {
+  @apply bg-violet-600 hover:bg-violet-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 hover:-translate-y-0.5;
+}
+
+.btn-secondary {
+  @apply bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-medium px-5 py-2.5 rounded-xl transition-all duration-200;
+}
+
+.btn-danger {
+  @apply bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 font-medium px-4 py-2 rounded-lg transition-all duration-200;
+}
+
+/* Input styling */
+.input-dark {
+  @apply bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500/60 focus:ring-1 focus:ring-violet-500/40 transition-all duration-200 w-full;
+}
+
+/* Animated background */
+.animated-bg {
+  background: radial-gradient(ellipse at 20% 50%, #3b0764 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 20%, #1e1b4b 0%, transparent 60%),
+              radial-gradient(ellipse at 50% 80%, #0c4a6e 0%, transparent 60%),
+              #07071a;
+}

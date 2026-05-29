@@ -1,21 +1,42 @@
 {
-  "name": "ai-storyboard-generator",
+  "name": "consistent-character-generator",
+  "version": "2.0.0",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "client": "vite",
+    "server": "tsx watch server/index.ts",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "tsx server/index.ts"
   },
   "dependencies": {
+    "@google/genai": "^1.20.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "@google/genai": "^1.20.0"
+    "react-hot-toast": "^2.4.1",
+    "react-router-dom": "^6.28.0",
+    "sql.js": "^1.14.1",
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^1.4.11",
     "@types/node": "^22.14.0",
+    "@types/sql.js": "^1.4.11",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
