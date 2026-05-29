@@ -1,3 +1,4 @@
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Project } from '../types';
 
@@ -5,6 +6,7 @@ interface Props {
   project: Project;
   onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
+  key?: React.Key;
 }
 
 export default function ProjectCard({ project, onEdit, onDelete }: Props) {
