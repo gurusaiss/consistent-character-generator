@@ -1,6 +1,13 @@
 import type { Project, Character, Scene, GenerateRequest, GenerateResponse } from '../types';
+import { supabase } from '../lib/supabase';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return {};
+  return { Authorization: `Bearer ${session.access_token}` };
+}
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -10,89 +17,73 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json();
 }
 
+async function get<T>(url: string): Promise<T> {
+  const headers = await authHeaders();
+  return fetch(url, { headers }).then(r => handleResponse<T>(r));
+}
+
+async function post<T>(url: string, body: unknown): Promise<T> {
+  const headers = { ...JSON_HEADERS, ...(await authHeaders()) };
+  return fetch(url, { method: 'POST', headers, body: JSON.stringify(body) }).then(r => handleResponse<T>(r));
+}
+
+async function put<T>(url: string, body: unknown): Promise<T> {
+  const headers = { ...JSON_HEADERS, ...(await authHeaders()) };
+  return fetch(url, { method: 'PUT', headers, body: JSON.stringify(body) }).then(r => handleResponse<T>(r));
+}
+
+async function del<T>(url: string): Promise<T> {
+  const headers = await authHeaders();
+  return fetch(url, { method: 'DELETE', headers }).then(r => handleResponse<T>(r));
+}
+
 export const api = {
   projects: {
-    list: (): Promise<Project[]> =>
-      fetch('/api/projects').then(handleResponse<Project[]>),
+    list: (): Promise<Project[]> => get('/api/projects'),
 
-    create: (data: { name: string; description?: string }): Promise<Project> =>
-      fetch('/api/projects', {
-        method: 'POST',
-        headers: JSON_HEADERS,
-        body: JSON.stringify(data),
-      }).then(handleResponse<Project>),
+    create: (data: { name: string; description?: string; style_preset?: string }): Promise<Project> =>
+      post('/api/projects', data),
 
-    get: (id: string): Promise<Project> =>
-      fetch(`/api/projects/${id}`).then(handleResponse<Project>),
+    get: (id: string): Promise<Project> => get(`/api/projects/${id}`),
 
-    update: (id: string, data: { name?: string; description?: string }): Promise<Project> =>
-      fetch(`/api/projects/${id}`, {
-        method: 'PUT',
-        headers: JSON_HEADERS,
-        body: JSON.stringify(data),
-      }).then(handleResponse<Project>),
+    update: (id: string, data: { name?: string; description?: string; style_preset?: string }): Promise<Project> =>
+      put(`/api/projects/${id}`, data),
 
-    delete: (id: string): Promise<{ success: boolean }> =>
-      fetch(`/api/projects/${id}`, { method: 'DELETE' }).then(handleResponse<{ success: boolean }>),
+    delete: (id: string): Promise<{ success: boolean }> => del(`/api/projects/${id}`),
   },
 
   characters: {
     list: (projectId: string): Promise<Character[]> =>
-      fetch(`/api/projects/${projectId}/characters`).then(handleResponse<Character[]>),
+      get(`/api/projects/${projectId}/characters`),
 
     create: (
       projectId: string,
       data: { name: string; description?: string; base_image?: string; mime_type?: string }
-    ): Promise<Character> =>
-      fetch(`/api/projects/${projectId}/characters`, {
-        method: 'POST',
-        headers: JSON_HEADERS,
-        body: JSON.stringify(data),
-      }).then(handleResponse<Character>),
+    ): Promise<Character> => post(`/api/projects/${projectId}/characters`, data),
 
     update: (
       id: string,
       data: { name?: string; description?: string; base_image?: string; mime_type?: string }
-    ): Promise<Character> =>
-      fetch(`/api/characters/${id}`, {
-        method: 'PUT',
-        headers: JSON_HEADERS,
-        body: JSON.stringify(data),
-      }).then(handleResponse<Character>),
+    ): Promise<Character> => put(`/api/characters/${id}`, data),
 
-    delete: (id: string): Promise<{ success: boolean }> =>
-      fetch(`/api/characters/${id}`, { method: 'DELETE' }).then(handleResponse<{ success: boolean }>),
+    delete: (id: string): Promise<{ success: boolean }> => del(`/api/characters/${id}`),
   },
 
   scenes: {
     list: (projectId: string): Promise<Scene[]> =>
-      fetch(`/api/projects/${projectId}/scenes`).then(handleResponse<Scene[]>),
+      get(`/api/projects/${projectId}/scenes`),
 
     bulkCreate: (projectId: string, scenes: { prompt: string }[]): Promise<Scene[]> =>
-      fetch(`/api/projects/${projectId}/scenes`, {
-        method: 'POST',
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ scenes }),
-      }).then(handleResponse<Scene[]>),
+      post(`/api/projects/${projectId}/scenes`, { scenes }),
 
     update: (
       id: string,
-      data: { prompt?: string; status?: string; image_data?: string; error_message?: string }
-    ): Promise<Scene> =>
-      fetch(`/api/scenes/${id}`, {
-        method: 'PUT',
-        headers: JSON_HEADERS,
-        body: JSON.stringify(data),
-      }).then(handleResponse<Scene>),
+      data: { prompt?: string; status?: string; generated_image_url?: string; error_message?: string }
+    ): Promise<Scene> => put(`/api/scenes/${id}`, data),
 
-    delete: (id: string): Promise<{ success: boolean }> =>
-      fetch(`/api/scenes/${id}`, { method: 'DELETE' }).then(handleResponse<{ success: boolean }>),
+    delete: (id: string): Promise<{ success: boolean }> => del(`/api/scenes/${id}`),
   },
 
   generate: (data: GenerateRequest): Promise<GenerateResponse> =>
-    fetch('/api/generate', {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify(data),
-    }).then(handleResponse<GenerateResponse>),
+    post('/api/generate', data),
 };

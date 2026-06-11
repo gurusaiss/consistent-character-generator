@@ -5,17 +5,25 @@ interface Props {
   onImageClick: (scene: Scene) => void;
 }
 
-function downloadImage(imageData: string, mimeType: string, filename: string) {
-  const link = document.createElement('a');
-  link.href = `data:${mimeType};base64,${imageData}`;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+async function downloadImage(url: string, filename: string) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    window.open(url, '_blank');
+  }
 }
 
 export default function ResultsGrid({ scenes, onImageClick }: Props) {
-  const successScenes = scenes.filter((s) => s.status === 'success' && s.image_data);
+  const successScenes = scenes.filter((s) => s.status === 'success' && s.generated_image_url);
   const loadingScenes = scenes.filter((s) => s.status === 'loading');
   const pendingScenes = scenes.filter((s) => s.status === 'pending');
   const errorScenes = scenes.filter((s) => s.status === 'error');
@@ -23,8 +31,8 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
   const handleDownloadAll = () => {
     successScenes.forEach((scene, i) => {
       setTimeout(() => {
-        downloadImage(scene.image_data, 'image/png', `scene-${scene.scene_number}.png`);
-      }, i * 200);
+        downloadImage(scene.generated_image_url, `scene-${scene.scene_number}.png`);
+      }, i * 300);
     });
   };
 
@@ -61,10 +69,10 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           {scenes.map((scene) => (
             <div key={scene.id} className="glass-card overflow-hidden group">
-              {scene.status === 'success' && scene.image_data ? (
+              {scene.status === 'success' && scene.generated_image_url ? (
                 <div className="relative">
                   <img
-                    src={`data:image/png;base64,${scene.image_data}`}
+                    src={scene.generated_image_url}
                     alt={`Scene ${scene.scene_number}`}
                     className="w-full cursor-pointer hover:opacity-90 transition-opacity"
                     onClick={() => onImageClick(scene)}
@@ -77,7 +85,7 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
                       View
                     </button>
                     <button
-                      onClick={() => downloadImage(scene.image_data, 'image/png', `scene-${scene.scene_number}.png`)}
+                      onClick={() => downloadImage(scene.generated_image_url, `scene-${scene.scene_number}.png`)}
                       className="bg-violet-600/80 hover:bg-violet-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
                     >
                       Download
@@ -103,11 +111,11 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
                   <p className="text-red-400 text-xs text-center">Scene {scene.scene_number}: {scene.error_message || 'Failed'}</p>
                 </div>
               ) : (
-                <div className="h-24 flex items-center justify-center gap-2">
+                <div className="h-24 flex items-center justify-center">
                   <span className="text-slate-600 text-xs">Scene {scene.scene_number} — pending</span>
                 </div>
               )}
-              {scene.status !== 'success' || !scene.image_data ? null : (
+              {scene.status === 'success' && scene.generated_image_url && (
                 <div className="px-3 py-2 border-t border-white/5">
                   <p className="text-slate-500 text-xs line-clamp-1">{scene.prompt}</p>
                 </div>

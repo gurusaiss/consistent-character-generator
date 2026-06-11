@@ -1,8 +1,11 @@
 export interface Project {
   id: string;
+  user_id: string;
   name: string;
   description: string;
-  thumbnail: string;
+  thumbnail_url: string;
+  style_preset: string;
+  is_public: boolean;
   scene_count: number;
   created_at: string;
   updated_at: string;
@@ -15,7 +18,7 @@ export interface Character {
   project_id: string;
   name: string;
   description: string;
-  base_image: string;
+  reference_image_url: string;
   mime_type: string;
   created_at: string;
 }
@@ -26,7 +29,7 @@ export interface Scene {
   scene_number: number;
   prompt: string;
   status: 'pending' | 'loading' | 'success' | 'error';
-  image_data: string;
+  generated_image_url: string;
   error_message: string;
   created_at: string;
 }
@@ -38,13 +41,21 @@ export interface GenerateRequest {
   characters: {
     name: string;
     description: string;
-    base_image: string;
+    reference_image_url: string;
     mime_type: string;
   }[];
 }
 
 export interface GenerateResponse {
-  imageData: string;
-  mimeType: string;
+  imageUrl: string;
   success: boolean;
 }
+
+export const STYLE_PRESETS = [
+  { value: 'cinematic', label: 'Cinematic', emoji: '🎬' },
+  { value: 'anime',     label: 'Anime',     emoji: '✨' },
+  { value: 'comic',     label: 'Comic Book', emoji: '💥' },
+  { value: 'watercolor',label: 'Watercolor', emoji: '🎨' },
+  { value: 'sketch',    label: 'Sketch',    emoji: '✏️' },
+  { value: 'pixel',     label: 'Pixel Art', emoji: '🕹️' },
+] as const;

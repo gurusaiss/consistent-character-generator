@@ -23,12 +23,10 @@ app.use('/api', charactersRouter);
 app.use('/api', scenesRouter);
 app.use('/api', generateRouter);
 
-// Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Serve static files in production
 if (process.env.NODE_ENV === 'production') {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   app.use(express.static(path.join(__dirname, '../dist')));

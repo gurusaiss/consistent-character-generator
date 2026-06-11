@@ -12,11 +12,8 @@ interface Props {
 export default function ProjectCard({ project, onEdit, onDelete }: Props) {
   const navigate = useNavigate();
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric',
-    });
-  };
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
     <div
@@ -25,9 +22,9 @@ export default function ProjectCard({ project, onEdit, onDelete }: Props) {
     >
       {/* Thumbnail */}
       <div className="h-44 overflow-hidden" style={{ borderRadius: '1rem 1rem 0 0' }}>
-        {project.thumbnail ? (
+        {project.thumbnail_url ? (
           <img
-            src={`data:image/png;base64,${project.thumbnail}`}
+            src={project.thumbnail_url}
             alt={project.name}
             className="w-full h-full object-cover"
           />

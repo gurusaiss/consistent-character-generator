@@ -12,9 +12,7 @@ export default function CharacterPanel({ characters, onAdd, onEdit, onDelete }: 
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-slate-200">Characters</h2>
-        <button onClick={onAdd} className="btn-primary text-xs py-1.5 px-3">
-          + Add
-        </button>
+        <button onClick={onAdd} className="btn-primary text-xs py-1.5 px-3">+ Add</button>
       </div>
 
       {characters.length === 0 ? (
@@ -32,11 +30,10 @@ export default function CharacterPanel({ characters, onAdd, onEdit, onDelete }: 
           {characters.map((char) => (
             <div key={char.id} className="glass-card p-3 group">
               <div className="flex items-center gap-3">
-                {/* Avatar */}
                 <div className="shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-white/10">
-                  {char.base_image ? (
+                  {char.reference_image_url ? (
                     <img
-                      src={`data:${char.mime_type};base64,${char.base_image}`}
+                      src={char.reference_image_url}
                       alt={char.name}
                       className="w-full h-full object-cover"
                     />
@@ -48,7 +45,6 @@ export default function CharacterPanel({ characters, onAdd, onEdit, onDelete }: 
                     </div>
                   )}
                 </div>
-                {/* Info */}
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-slate-200 text-sm truncate">{char.name}</p>
                   {char.description && (
@@ -56,7 +52,6 @@ export default function CharacterPanel({ characters, onAdd, onEdit, onDelete }: 
                   )}
                 </div>
               </div>
-              {/* Actions */}
               <div className="flex gap-2 mt-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => onEdit(char)}

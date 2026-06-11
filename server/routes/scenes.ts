@@ -1,82 +1,113 @@
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
-import { getDb, run, getRow, getAll } from '../db.js';
+import { supabase } from '../supabase.js';
+import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
+function extractPath(url: string, bucket: string): string | null {
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const idx = url.indexOf(marker);
+  return idx === -1 ? null : url.slice(idx + marker.length);
+}
+
 // GET /api/projects/:id/scenes
-router.get('/projects/:id/scenes', async (req, res) => {
-  try {
-    const db = await getDb();
-    const scenes = getAll(db, 'SELECT * FROM scenes WHERE project_id = ? ORDER BY scene_number ASC', [req.params.id]);
-    res.json(scenes);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+router.get('/projects/:id/scenes', requireAuth, async (req, res) => {
+  const { data, error } = await supabase
+    .from('scenes')
+    .select('*')
+    .eq('project_id', req.params.id)
+    .order('scene_number');
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
-// POST /api/projects/:id/scenes - bulk create/replace
-router.post('/projects/:id/scenes', async (req, res) => {
-  try {
-    const { scenes } = req.body;
-    if (!Array.isArray(scenes)) return res.status(400).json({ error: 'scenes must be array' });
-    const projectId = req.params.id;
-    const db = await getDb();
+// POST /api/projects/:id/scenes — bulk replace
+router.post('/projects/:id/scenes', requireAuth, async (req, res) => {
+  const { scenes } = req.body;
+  if (!Array.isArray(scenes)) return res.status(400).json({ error: 'scenes must be array' });
+  const projectId = req.params.id;
 
-    // Delete existing scenes
-    run(db, 'DELETE FROM scenes WHERE project_id = ?', [projectId]);
+  // Get existing scenes to clean up their images
+  const { data: existing } = await supabase
+    .from('scenes')
+    .select('generated_image_url')
+    .eq('project_id', projectId);
 
-    // Insert new scenes
-    scenes.forEach((item: { prompt: string }, i: number) => {
-      run(db, `
-        INSERT INTO scenes (id, project_id, scene_number, prompt, status)
-        VALUES (?, ?, ?, ?, 'pending')
-      `, [uuidv4(), projectId, i + 1, item.prompt]);
-    });
+  const imagePaths = (existing || [])
+    .map(s => extractPath(s.generated_image_url, 'generated-scenes'))
+    .filter(Boolean) as string[];
 
-    // Update project
-    run(db, "UPDATE projects SET scene_count = ?, updated_at = datetime('now') WHERE id = ?", [scenes.length, projectId]);
-
-    const created = getAll(db, 'SELECT * FROM scenes WHERE project_id = ? ORDER BY scene_number ASC', [projectId]);
-    res.status(201).json(created);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  if (imagePaths.length > 0) {
+    await supabase.storage.from('generated-scenes').remove(imagePaths);
   }
+
+  // Delete existing scenes
+  await supabase.from('scenes').delete().eq('project_id', projectId);
+
+  if (scenes.length === 0) {
+    await supabase.from('projects').update({
+      scene_count: 0,
+      updated_at: new Date().toISOString(),
+    }).eq('id', projectId);
+    return res.status(201).json([]);
+  }
+
+  const rows = scenes.map((item: { prompt: string }, i: number) => ({
+    project_id: projectId,
+    scene_number: i + 1,
+    prompt: item.prompt,
+    status: 'pending',
+  }));
+
+  const { data, error } = await supabase.from('scenes').insert(rows).select();
+  if (error) return res.status(500).json({ error: error.message });
+
+  await supabase.from('projects').update({
+    scene_count: scenes.length,
+    updated_at: new Date().toISOString(),
+  }).eq('id', projectId);
+
+  res.status(201).json(data);
 });
 
 // PUT /api/scenes/:id
-router.put('/scenes/:id', async (req, res) => {
-  try {
-    const { prompt, status, image_data, error_message } = req.body;
-    const db = await getDb();
-    const scene = getRow(db, 'SELECT * FROM scenes WHERE id = ?', [req.params.id]);
-    if (!scene) return res.status(404).json({ error: 'Scene not found' });
-    run(db, `
-      UPDATE scenes SET
-        prompt = COALESCE(?, prompt),
-        status = COALESCE(?, status),
-        image_data = COALESCE(?, image_data),
-        error_message = COALESCE(?, error_message)
-      WHERE id = ?
-    `, [prompt ?? null, status ?? null, image_data ?? null, error_message ?? null, req.params.id]);
-    const updated = getRow(db, 'SELECT * FROM scenes WHERE id = ?', [req.params.id]);
-    res.json(updated);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+router.put('/scenes/:id', requireAuth, async (req, res) => {
+  const { prompt, status, generated_image_url, error_message } = req.body;
+
+  const updates: Record<string, any> = {};
+  if (prompt !== undefined) updates.prompt = prompt;
+  if (status !== undefined) updates.status = status;
+  if (generated_image_url !== undefined) updates.generated_image_url = generated_image_url;
+  if (error_message !== undefined) updates.error_message = error_message;
+
+  const { data, error } = await supabase
+    .from('scenes')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error || !data) return res.status(404).json({ error: 'Scene not found' });
+  res.json(data);
 });
 
 // DELETE /api/scenes/:id
-router.delete('/scenes/:id', async (req, res) => {
-  try {
-    const db = await getDb();
-    const scene = getRow(db, 'SELECT * FROM scenes WHERE id = ?', [req.params.id]);
-    if (!scene) return res.status(404).json({ error: 'Scene not found' });
-    run(db, 'DELETE FROM scenes WHERE id = ?', [req.params.id]);
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+router.delete('/scenes/:id', requireAuth, async (req, res) => {
+  const { data: scene } = await supabase
+    .from('scenes')
+    .select('generated_image_url, project_id')
+    .eq('id', req.params.id)
+    .single();
+
+  if (scene?.generated_image_url) {
+    const path = extractPath(scene.generated_image_url, 'generated-scenes');
+    if (path) await supabase.storage.from('generated-scenes').remove([path]);
   }
+
+  const { error } = await supabase.from('scenes').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
 });
 
 export default router;

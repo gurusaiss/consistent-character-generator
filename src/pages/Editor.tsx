@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api } from '../services/api';
 import type { Project, Character, Scene } from '../types';
+import { STYLE_PRESETS } from '../types';
+import { exportStoryboardPDF, type PdfFormat } from '../utils/exportPDF';
 import CharacterPanel from '../components/CharacterPanel';
 import SceneList from '../components/SceneList';
 import ResultsGrid from '../components/ResultsGrid';
@@ -20,12 +22,13 @@ export default function Editor() {
   // Character form
   const [showCharForm, setShowCharForm] = useState(false);
   const [editChar, setEditChar] = useState<Character | null>(null);
-  const [charForm, setCharForm] = useState({ name: '', description: '', base_image: '', mime_type: 'image/jpeg' });
+  const [charForm, setCharForm] = useState({
+    name: '', description: '', base_image: '', mime_type: 'image/jpeg', preview_url: '',
+  });
   const [charSubmitting, setCharSubmitting] = useState(false);
 
   // Scene editing
   const [storyText, setStoryText] = useState('');
-  const [generating, setGenerating] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
 
   // Modal
@@ -33,6 +36,11 @@ export default function Editor() {
 
   // Delete confirms
   const [deleteCharTarget, setDeleteCharTarget] = useState<Character | null>(null);
+
+  // PDF export
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [pdfFormat, setPdfFormat] = useState<PdfFormat>('cinema');
+  const [exportingPDF, setExportingPDF] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -57,16 +65,34 @@ export default function Editor() {
     }
   }
 
+  // ---- Style preset ----
+  async function handleStyleChange(style: string) {
+    if (!project) return;
+    try {
+      const updated = await api.projects.update(project.id, { style_preset: style });
+      setProject(updated);
+      toast.success('Style updated!');
+    } catch (err: any) {
+      toast.error('Failed to update style: ' + err.message);
+    }
+  }
+
   // ---- Characters ----
   function openAddChar() {
     setEditChar(null);
-    setCharForm({ name: '', description: '', base_image: '', mime_type: 'image/jpeg' });
+    setCharForm({ name: '', description: '', base_image: '', mime_type: 'image/jpeg', preview_url: '' });
     setShowCharForm(true);
   }
 
   function openEditChar(char: Character) {
     setEditChar(char);
-    setCharForm({ name: char.name, description: char.description, base_image: char.base_image, mime_type: char.mime_type });
+    setCharForm({
+      name: char.name,
+      description: char.description,
+      base_image: '',
+      mime_type: char.mime_type,
+      preview_url: char.reference_image_url,
+    });
     setShowCharForm(true);
   }
 
@@ -77,7 +103,7 @@ export default function Editor() {
     reader.onload = () => {
       const result = reader.result as string;
       const base64 = result.split(',')[1];
-      setCharForm((prev) => ({ ...prev, base_image: base64, mime_type: file.type }));
+      setCharForm((prev) => ({ ...prev, base_image: base64, mime_type: file.type, preview_url: '' }));
     };
     reader.readAsDataURL(file);
   }
@@ -86,12 +112,17 @@ export default function Editor() {
     if (!charForm.name.trim()) { toast.error('Character name is required'); return; }
     try {
       setCharSubmitting(true);
+      const payload: any = { name: charForm.name, description: charForm.description };
+      if (charForm.base_image) {
+        payload.base_image = charForm.base_image;
+        payload.mime_type = charForm.mime_type;
+      }
       if (editChar) {
-        const updated = await api.characters.update(editChar.id, charForm);
+        const updated = await api.characters.update(editChar.id, payload);
         setCharacters((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
         toast.success('Character updated!');
       } else {
-        const created = await api.characters.create(projectId!, charForm);
+        const created = await api.characters.create(projectId!, payload);
         setCharacters((prev) => [...prev, created]);
         toast.success('Character added!');
       }
@@ -117,11 +148,8 @@ export default function Editor() {
 
   // ---- Scenes ----
   async function handleParseScenes() {
-    const lines = storyText
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length === 0) { toast.error('Please write some scene prompts first'); return; }
+    const lines = storyText.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) { toast.error('Write some scene prompts first'); return; }
     try {
       const created = await api.scenes.bulkCreate(projectId!, lines.map((l) => ({ prompt: l })));
       setScenes(created);
@@ -131,25 +159,10 @@ export default function Editor() {
     }
   }
 
-  async function handleAddScene() {
-    const prompt = prompt_dialog('Enter scene prompt:');
-    if (!prompt) return;
-    const maxNum = scenes.reduce((max, s) => Math.max(max, s.scene_number), 0);
-    try {
-      const newSceneList = [...scenes.map((s) => ({ prompt: s.prompt })), { prompt }];
-      const created = await api.scenes.bulkCreate(projectId!, newSceneList);
-      setScenes(created);
-      setStoryText(created.map((s) => s.prompt).join('\n'));
-    } catch (err: any) {
-      toast.error('Failed to add scene: ' + err.message);
-    }
-  }
-
   async function handleDeleteScene(scene: Scene) {
     try {
       await api.scenes.delete(scene.id);
       const remaining = scenes.filter((s) => s.id !== scene.id);
-      // Rebuild with updated numbering
       if (remaining.length > 0) {
         const rebuilt = await api.scenes.bulkCreate(projectId!, remaining.map((s) => ({ prompt: s.prompt })));
         setScenes(rebuilt);
@@ -175,14 +188,14 @@ export default function Editor() {
         characters: characters.map((c) => ({
           name: c.name,
           description: c.description,
-          base_image: c.base_image,
+          reference_image_url: c.reference_image_url,
           mime_type: c.mime_type,
         })),
       });
       setScenes((prev) =>
         prev.map((s) =>
           s.id === scene.id
-            ? { ...s, status: 'success', image_data: result.imageData, error_message: '' }
+            ? { ...s, status: 'success', generated_image_url: result.imageUrl, error_message: '' }
             : s
         )
       );
@@ -199,9 +212,6 @@ export default function Editor() {
   async function handleGenerateAll() {
     const pending = scenes.filter((s) => s.status === 'pending' || s.status === 'error');
     if (pending.length === 0) { toast('No pending scenes to generate'); return; }
-    if (!process.env.GEMINI_API_KEY && pending.length > 0) {
-      // Just try anyway - server will handle the error
-    }
     setGeneratingAll(true);
     toast.success(`Generating ${pending.length} scene${pending.length !== 1 ? 's' : ''}…`);
     for (const scene of pending) {
@@ -211,8 +221,24 @@ export default function Editor() {
     toast.success('Generation complete!');
   }
 
-  async function handleRetryScene(scene: Scene) {
-    await generateScene(scene);
+  // ---- PDF export ----
+  async function handleExportPDF() {
+    if (!project) return;
+    const generated = scenes.filter(s => s.generated_image_url);
+    if (generated.length === 0) {
+      toast.error('Generate at least one scene before exporting');
+      return;
+    }
+    setExportingPDF(true);
+    try {
+      await exportStoryboardPDF(project, characters, scenes, pdfFormat);
+      setShowPdfModal(false);
+      toast.success('PDF exported!');
+    } catch (err: any) {
+      toast.error('Export failed: ' + err.message);
+    } finally {
+      setExportingPDF(false);
+    }
   }
 
   if (loading) {
@@ -226,10 +252,12 @@ export default function Editor() {
     );
   }
 
+  const generatedCount = scenes.filter(s => s.generated_image_url).length;
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
       {/* Top bar */}
-      <div className="border-b border-white/5 px-4 sm:px-6 py-3 flex items-center justify-between gap-4" style={{ backgroundColor: 'rgba(15,15,42,0.9)' }}>
+      <div className="border-b border-white/5 px-4 sm:px-6 py-3 flex items-center justify-between gap-4 flex-wrap" style={{ backgroundColor: 'rgba(15,15,42,0.9)' }}>
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={() => navigate('/dashboard')} className="text-slate-500 hover:text-slate-300 transition-colors text-sm">
             ← Dashboard
@@ -237,9 +265,27 @@ export default function Editor() {
           <span className="text-slate-700">/</span>
           <h1 className="font-semibold text-slate-200 truncate">{project?.name}</h1>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Style selector */}
+          <select
+            value={project?.style_preset || 'cinematic'}
+            onChange={(e) => handleStyleChange(e.target.value)}
+            className="text-xs bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-slate-300 focus:outline-none focus:border-violet-500/60"
+          >
+            {STYLE_PRESETS.map(({ value, label, emoji }) => (
+              <option key={value} value={value}>{emoji} {label}</option>
+            ))}
+          </select>
+          {generatedCount > 0 && (
+            <button
+              onClick={() => setShowPdfModal(true)}
+              className="btn-secondary text-sm py-2"
+            >
+              Export PDF
+            </button>
+          )}
           <span className="text-slate-500 text-sm hidden sm:block">
-            {characters.length} character{characters.length !== 1 ? 's' : ''} · {scenes.length} scene{scenes.length !== 1 ? 's' : ''}
+            {characters.length} char · {scenes.length} scenes
           </span>
           <button
             onClick={handleGenerateAll}
@@ -269,15 +315,11 @@ export default function Editor() {
         <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#07071a' }}>
           <div className="p-4 border-b border-white/5 flex items-center justify-between">
             <h2 className="font-semibold text-slate-200">Scenes</h2>
-            <div className="flex items-center gap-2">
-              <button onClick={handleParseScenes} className="btn-secondary text-xs py-1.5 px-3">
-                Parse & Save
-              </button>
-            </div>
+            <button onClick={handleParseScenes} className="btn-secondary text-xs py-1.5 px-3">
+              Parse & Save
+            </button>
           </div>
-
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {/* Text area for story */}
             <div>
               <label className="block text-xs text-slate-500 mb-2 uppercase tracking-wide">
                 Story text — each line becomes a scene
@@ -287,12 +329,10 @@ export default function Editor() {
                 onChange={(e) => setStoryText(e.target.value)}
                 placeholder={"A warrior stands at the gates of the ancient city.\nInside, flames light up the crowded market.\nThe hero discovers a mysterious artifact in the ruins."}
                 className="input-dark resize-none font-mono text-sm leading-relaxed"
-                style={{ minHeight: '180px', height: 'auto' }}
+                style={{ minHeight: '180px' }}
                 rows={8}
               />
             </div>
-
-            {/* Scene list */}
             {scenes.length > 0 && (
               <div>
                 <p className="text-xs text-slate-500 mb-3 uppercase tracking-wide">
@@ -301,16 +341,15 @@ export default function Editor() {
                 <SceneList
                   scenes={scenes}
                   onDelete={handleDeleteScene}
-                  onRetry={handleRetryScene}
+                  onRetry={generateScene}
                 />
               </div>
             )}
-
             {scenes.length === 0 && !storyText && (
               <div className="glass-card p-8 text-center">
                 <p className="text-slate-500 text-sm">
                   Write your story above — each line will become a scene.
-                  Then click <strong className="text-slate-400">Parse & Save</strong> to create the scenes.
+                  Then click <strong className="text-slate-400">Parse & Save</strong>.
                 </p>
               </div>
             )}
@@ -351,29 +390,21 @@ export default function Editor() {
             </div>
             <div>
               <label className="block text-sm text-slate-400 mb-1.5">Reference Image</label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="btn-secondary w-full text-sm"
-              >
-                {charForm.base_image ? 'Change Image' : 'Upload Image'}
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="btn-secondary w-full text-sm">
+                {charForm.base_image || charForm.preview_url ? 'Change Image' : 'Upload Image'}
               </button>
-              {charForm.base_image && (
+              {(charForm.base_image || charForm.preview_url) && (
                 <div className="mt-3 flex items-center gap-3">
                   <img
-                    src={`data:${charForm.mime_type};base64,${charForm.base_image}`}
+                    src={charForm.base_image
+                      ? `data:${charForm.mime_type};base64,${charForm.base_image}`
+                      : charForm.preview_url}
                     alt="Preview"
                     className="w-16 h-16 rounded-xl object-cover border border-white/10"
                   />
                   <button
-                    onClick={() => setCharForm({ ...charForm, base_image: '', mime_type: 'image/jpeg' })}
+                    onClick={() => setCharForm({ ...charForm, base_image: '', preview_url: '', mime_type: 'image/jpeg' })}
                     className="text-xs text-red-400 hover:text-red-300"
                   >
                     Remove
@@ -404,15 +435,47 @@ export default function Editor() {
         </Modal>
       )}
 
+      {/* PDF Export Modal */}
+      {showPdfModal && (
+        <Modal title="Export Storyboard PDF" onClose={() => setShowPdfModal(false)}>
+          <div className="space-y-4">
+            <p className="text-slate-400 text-sm">
+              Export all {generatedCount} generated scene{generatedCount !== 1 ? 's' : ''} as a storyboard PDF.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                { f: 'cinema' as PdfFormat, label: 'Cinema', emoji: '🎬', desc: 'Landscape · Image left, text right' },
+                { f: 'comic'  as PdfFormat, label: 'Comic',  emoji: '📖', desc: 'Portrait · Image top, text below' },
+              ]).map(({ f, label, emoji, desc }) => (
+                <button
+                  key={f}
+                  onClick={() => setPdfFormat(f)}
+                  className={`p-4 rounded-xl border text-left transition-all ${
+                    pdfFormat === f
+                      ? 'border-violet-500/60 bg-violet-600/10 text-violet-300'
+                      : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/20'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">{emoji}</div>
+                  <div className="font-medium text-sm">{label}</div>
+                  <div className="text-xs opacity-60 mt-0.5">{desc}</div>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setShowPdfModal(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleExportPDF} disabled={exportingPDF} className="btn-primary disabled:opacity-50">
+                {exportingPDF ? 'Exporting…' : 'Export PDF'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Image Modal */}
       <ImageModal scene={selectedScene} onClose={() => setSelectedScene(null)} projectName={project?.name} />
     </div>
   );
-}
-
-// Inline simple prompt dialog replacement
-function prompt_dialog(message: string): string | null {
-  return window.prompt(message);
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {

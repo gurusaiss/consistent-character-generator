@@ -10,6 +10,23 @@ interface GalleryItem {
   projectId: string;
 }
 
+async function downloadImage(url: string, filename: string) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    window.open(url, '_blank');
+  }
+}
+
 export default function Gallery() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [items, setItems] = useState<GalleryItem[]>([]);
@@ -27,12 +44,10 @@ export default function Gallery() {
       const projectList = await api.projects.list();
       setProjects(projectList);
 
-      // Load scenes for each project
       const allItems: GalleryItem[] = [];
       for (const project of projectList) {
         const scenes = await api.scenes.list(project.id);
-        const successScenes = scenes.filter((s) => s.status === 'success' && s.image_data);
-        for (const scene of successScenes) {
+        for (const scene of scenes.filter((s) => s.status === 'success' && s.generated_image_url)) {
           allItems.push({ scene, projectName: project.name, projectId: project.id });
         }
       }
@@ -44,22 +59,12 @@ export default function Gallery() {
     }
   }
 
-  function downloadImage(imageData: string, mimeType: string, filename: string) {
-    const link = document.createElement('a');
-    link.href = `data:${mimeType};base64,${imageData}`;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
   const filtered = filterProject === 'all'
     ? items
     : items.filter((item) => item.projectId === filterProject);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold gradient-text">Gallery</h1>
@@ -110,11 +115,10 @@ export default function Gallery() {
             >
               <div className="relative">
                 <img
-                  src={`data:image/png;base64,${scene.image_data}`}
+                  src={scene.generated_image_url}
                   alt={`Scene ${scene.scene_number}`}
                   className="w-full"
                 />
-                {/* Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                   <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
                     <div>
@@ -124,7 +128,7 @@ export default function Gallery() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        downloadImage(scene.image_data, 'image/png', `${projectName}-scene-${scene.scene_number}.png`);
+                        downloadImage(scene.generated_image_url, `${projectName}-scene-${scene.scene_number}.png`);
                       }}
                       className="bg-violet-600/80 hover:bg-violet-600 text-white text-xs px-2.5 py-1 rounded-lg transition-colors"
                     >
@@ -144,7 +148,6 @@ export default function Gallery() {
         </div>
       )}
 
-      {/* Image Modal */}
       <ImageModal
         scene={selectedItem?.scene || null}
         onClose={() => setSelectedItem(null)}
