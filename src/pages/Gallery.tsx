@@ -46,9 +46,13 @@ export default function Gallery() {
 
       const allItems: GalleryItem[] = [];
       for (const project of projectList) {
-        const scenes = await api.scenes.list(project.id);
-        for (const scene of scenes.filter((s) => s.status === 'success' && s.generated_image_url)) {
-          allItems.push({ scene, projectName: project.name, projectId: project.id });
+        try {
+          const scenes = await api.scenes.list(project.id);
+          for (const scene of scenes.filter((s) => s.status === 'success' && s.generated_image_url)) {
+            allItems.push({ scene, projectName: project.name, projectId: project.id });
+          }
+        } catch {
+          // Skip projects whose scenes fail to load — don't abort the whole gallery
         }
       }
       setItems(allItems);

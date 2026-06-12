@@ -73,13 +73,14 @@ router.post('/projects/:id/scenes', requireAuth, async (req, res) => {
 
 // PUT /api/scenes/:id
 router.put('/scenes/:id', requireAuth, async (req, res) => {
-  const { prompt, status, generated_image_url, error_message } = req.body;
+  const { prompt, status, generated_image_url, error_message, scene_number } = req.body;
 
   const updates: Record<string, any> = {};
   if (prompt !== undefined) updates.prompt = prompt;
   if (status !== undefined) updates.status = status;
   if (generated_image_url !== undefined) updates.generated_image_url = generated_image_url;
   if (error_message !== undefined) updates.error_message = error_message;
+  if (scene_number !== undefined) updates.scene_number = scene_number;
 
   const { data, error } = await supabase
     .from('scenes')

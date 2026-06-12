@@ -78,7 +78,7 @@ export const api = {
 
     update: (
       id: string,
-      data: { prompt?: string; status?: string; generated_image_url?: string; error_message?: string }
+      data: { prompt?: string; status?: string; generated_image_url?: string; error_message?: string; scene_number?: number }
     ): Promise<Scene> => put(`/api/scenes/${id}`, data),
 
     delete: (id: string): Promise<{ success: boolean }> => del(`/api/scenes/${id}`),

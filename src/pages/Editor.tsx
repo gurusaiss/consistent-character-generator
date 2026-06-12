@@ -34,8 +34,9 @@ export default function Editor() {
   // Modal
   const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
 
-  // Delete confirms
+  // Delete / parse confirms
   const [deleteCharTarget, setDeleteCharTarget] = useState<Character | null>(null);
+  const [showParseConfirm, setShowParseConfirm] = useState(false);
 
   // PDF export
   const [showPdfModal, setShowPdfModal] = useState(false);
@@ -147,9 +148,10 @@ export default function Editor() {
   }
 
   // ---- Scenes ----
-  async function handleParseScenes() {
+  async function executeParse() {
     const lines = storyText.split('\n').map((l) => l.trim()).filter(Boolean);
     if (lines.length === 0) { toast.error('Write some scene prompts first'); return; }
+    setShowParseConfirm(false);
     try {
       const created = await api.scenes.bulkCreate(projectId!, lines.map((l) => ({ prompt: l })));
       setScenes(created);
@@ -159,18 +161,32 @@ export default function Editor() {
     }
   }
 
+  function handleParseScenes() {
+    const lines = storyText.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) { toast.error('Write some scene prompts first'); return; }
+    const hasGenerated = scenes.some((s) => s.generated_image_url);
+    if (hasGenerated) {
+      setShowParseConfirm(true);
+    } else {
+      executeParse();
+    }
+  }
+
   async function handleDeleteScene(scene: Scene) {
     try {
       await api.scenes.delete(scene.id);
-      const remaining = scenes.filter((s) => s.id !== scene.id);
-      if (remaining.length > 0) {
-        const rebuilt = await api.scenes.bulkCreate(projectId!, remaining.map((s) => ({ prompt: s.prompt })));
-        setScenes(rebuilt);
-        setStoryText(rebuilt.map((s) => s.prompt).join('\n'));
-      } else {
-        setScenes([]);
-        setStoryText('');
-      }
+      const remaining = scenes
+        .filter((s) => s.id !== scene.id)
+        .map((s, i) => ({ ...s, scene_number: i + 1 }));
+      setScenes(remaining);
+      setStoryText(remaining.map((s) => s.prompt).join('\n'));
+      // Persist updated scene numbers silently
+      remaining.forEach((s, i) => {
+        const originalNumber = scenes.find(orig => orig.id === s.id)?.scene_number;
+        if (originalNumber !== i + 1) {
+          api.scenes.update(s.id, { scene_number: i + 1 }).catch(() => {});
+        }
+      });
       toast.success('Scene deleted');
     } catch (err: any) {
       toast.error('Failed to delete scene: ' + err.message);
@@ -211,7 +227,7 @@ export default function Editor() {
 
   async function handleGenerateAll() {
     const pending = scenes.filter((s) => s.status === 'pending' || s.status === 'error');
-    if (pending.length === 0) { toast('No pending scenes to generate'); return; }
+    if (pending.length === 0) { toast.error('No pending or failed scenes to generate'); return; }
     setGeneratingAll(true);
     toast.success(`Generating ${pending.length} scene${pending.length !== 1 ? 's' : ''}…`);
     for (const scene of pending) {
@@ -418,6 +434,19 @@ export default function Editor() {
                 {charSubmitting ? 'Saving…' : editChar ? 'Save Changes' : 'Add Character'}
               </button>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Parse & Save Confirm */}
+      {showParseConfirm && (
+        <Modal title="Replace existing scenes?" onClose={() => setShowParseConfirm(false)}>
+          <p className="text-slate-400 mb-6">
+            Some scenes already have generated images. Parsing will <strong className="text-red-400">permanently delete all current scenes and their generated images</strong>. This cannot be undone.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setShowParseConfirm(false)} className="btn-secondary">Cancel</button>
+            <button onClick={executeParse} className="btn-danger">Replace All</button>
           </div>
         </Modal>
       )}
