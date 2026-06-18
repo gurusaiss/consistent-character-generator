@@ -530,7 +530,7 @@ export default function Editor() {
         </div>
 
         {/* Results grid */}
-        <div className="w-72 xl:w-88 border-l border-white/5 flex flex-col overflow-hidden shrink-0" style={{ backgroundColor: '#0a0a20' }}>
+        <div className="w-72 xl:w-80 border-l border-white/5 flex flex-col overflow-hidden shrink-0" style={{ backgroundColor: '#0a0a20' }}>
           <div className="flex-1 overflow-y-auto p-4">
             <ResultsGrid scenes={scenes} onImageClick={setSelectedScene} />
           </div>

@@ -143,7 +143,7 @@ async function checkConsistency(
     });
 
     const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '75';
-    const score = parseInt(text.replace(/\D/g, ''));
+    const score = parseInt(text.match(/\d+/)?.[0] ?? '75');
     return isNaN(score) ? 75 : Math.min(100, Math.max(0, score));
   } catch {
     return 75; // neutral fallback on error
@@ -246,12 +246,13 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
 
     // Persist scene state + consistency score
     if (sceneId) {
-      await supabase.from('scenes').update({
+      const { error: sceneUpdateErr } = await supabase.from('scenes').update({
         status: 'success',
         generated_image_url: publicUrl,
         error_message: '',
         consistency_score: consistencyScore,
       }).eq('id', sceneId);
+      if (sceneUpdateErr) console.error('Scene update failed:', sceneUpdateErr.message);
     }
 
     // Increment credit counter
