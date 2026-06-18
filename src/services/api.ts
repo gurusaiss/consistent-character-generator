@@ -46,7 +46,7 @@ export const api = {
 
     get: (id: string): Promise<Project> => get(`/api/projects/${id}`),
 
-    update: (id: string, data: { name?: string; description?: string; style_preset?: string }): Promise<Project> =>
+    update: (id: string, data: { name?: string; description?: string; style_preset?: string; is_public?: boolean }): Promise<Project> =>
       put(`/api/projects/${id}`, data),
 
     delete: (id: string): Promise<{ success: boolean }> => del(`/api/projects/${id}`),
@@ -90,5 +90,13 @@ export const api = {
   profile: {
     usage: (): Promise<{ used: number; limit: number; remaining: number }> =>
       get('/api/profile/usage'),
+  },
+
+  share: {
+    get: (projectId: string): Promise<Project & { scenes: Scene[] }> =>
+      fetch(`/api/share/${projectId}`).then(r => {
+        if (!r.ok) throw new Error('Not found');
+        return r.json();
+      }),
   },
 };

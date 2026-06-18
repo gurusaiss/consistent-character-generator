@@ -7,18 +7,147 @@ import { generateRateLimiter } from '../middleware/rateLimiter.js';
 const router = Router();
 
 const STYLE_PROMPTS: Record<string, string> = {
-  cinematic: 'cinematic film still, photorealistic, movie production quality, dramatic lighting, widescreen composition',
-  anime: 'anime style illustration, Japanese animation, vibrant colors, clean linework, expressive characters',
-  comic: 'comic book art, bold ink outlines, halftone shading, dynamic superhero comic panel style',
+  cinematic:  'cinematic film still, photorealistic, movie production quality, dramatic lighting, widescreen composition',
+  anime:      'anime style illustration, Japanese animation, vibrant colors, clean linework, expressive characters',
+  comic:      'comic book art, bold ink outlines, halftone shading, dynamic superhero comic panel style',
   watercolor: 'watercolor painting, soft color washes, loose brushstrokes, artistic illustration',
-  sketch: 'pencil sketch concept art, rough storyboard drawing, hand-drawn black and white illustration',
-  pixel: 'pixel art, 16-bit retro game aesthetic, low resolution sprite style, vibrant limited palette',
+  sketch:     'pencil sketch concept art, rough storyboard drawing, hand-drawn black and white illustration',
+  pixel:      'pixel art, 16-bit retro game aesthetic, low resolution sprite style, vibrant limited palette',
 };
 
 async function fetchImageAsBase64(url: string): Promise<string> {
   const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
   const buffer = await res.arrayBuffer();
   return Buffer.from(buffer).toString('base64');
+}
+
+interface CharInput {
+  name: string;
+  description: string;
+  reference_image_url: string;
+  mime_type: string;
+  visual_dna: string;
+}
+
+interface CharData extends CharInput {
+  fetchedBase64: string;
+}
+
+function buildPromptParts(chars: CharData[], stylePrompt: string, scenePrompt: string): any[] {
+  const parts: any[] = [];
+  const withImages = chars.filter(c => c.fetchedBase64);
+
+  // 1. Inject reference images first
+  for (const char of withImages) {
+    parts.push({ inlineData: { mimeType: char.mime_type || 'image/jpeg', data: char.fetchedBase64 } });
+    parts.push({ text: `↑ Visual reference for "${char.name}" — match this character's appearance exactly.` });
+  }
+
+  // 2. Character DNA specs (the secret sauce for consistency)
+  if (chars.length > 0) {
+    const charSpecs = chars.map(c => {
+      const lines = [`CHARACTER: ${c.name}`];
+      if (c.description) lines.push(`Description: ${c.description}`);
+      if (c.visual_dna) lines.push(`Visual DNA (authoritative specification): ${c.visual_dna}`);
+      if (c.fetchedBase64) lines.push(`(Reference image provided above — replicate exactly)`);
+      return lines.join('\n');
+    }).join('\n\n');
+
+    parts.push({ text: `=== CHARACTER SPECIFICATIONS ===\n${charSpecs}\n=== END SPECIFICATIONS ===` });
+  }
+
+  // 3. Main generation instruction
+  const hasRefs = withImages.length > 0;
+  const hasDNA = chars.some(c => c.visual_dna);
+
+  const instructions = [
+    'You are a master storyboard artist for a major film production.',
+    '',
+    hasRefs
+      ? 'CRITICAL — CHARACTER CONSISTENCY RULES:\n' +
+        '• The reference images above ARE the characters. Replicate their faces, hair, skin tones, and clothing EXACTLY.\n' +
+        '• Character DNA specifications above provide authoritative visual detail — follow them precisely.\n' +
+        '• Consistency failure is unacceptable. Every physical feature must match the reference.'
+      : hasDNA
+        ? 'CHARACTER CONSISTENCY RULES:\n' +
+          '• Follow the Visual DNA specifications above precisely for each character.\n' +
+          '• Maintain consistent facial features, hair, and clothing throughout.'
+        : '',
+    '',
+    `ART DIRECTION: ${stylePrompt}`,
+    '',
+    `SCENE TO ILLUSTRATE:\n${scenePrompt}`,
+    '',
+    'OUTPUT REQUIREMENTS:\n' +
+    '• Single high-quality storyboard panel\n' +
+    '• No text overlays, watermarks, speech bubbles, or borders\n' +
+    '• Cinematic framing and professional composition\n' +
+    '• All characters must match their specifications above',
+  ].filter(s => s !== null).join('\n');
+
+  parts.push({ text: instructions });
+  return parts;
+}
+
+async function runGeneration(ai: GoogleGenAI, parts: any[]): Promise<{ imageData: string; mimeType: string }> {
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.0-flash-exp',
+    contents: [{ parts }],
+    config: { responseModalities: ['IMAGE', 'TEXT'] },
+  });
+
+  let imageData = '';
+  let mimeType = 'image/png';
+  for (const candidate of response.candidates || []) {
+    for (const part of candidate.content?.parts || []) {
+      if (part.inlineData) {
+        imageData = part.inlineData.data || '';
+        mimeType = part.inlineData.mimeType || 'image/png';
+        break;
+      }
+    }
+    if (imageData) break;
+  }
+
+  if (!imageData) throw new Error('No image was generated. The model did not return image data.');
+  return { imageData, mimeType };
+}
+
+async function checkConsistency(
+  ai: GoogleGenAI,
+  chars: CharData[],
+  generatedBase64: string,
+): Promise<number> {
+  const charsWithRefs = chars.filter(c => c.fetchedBase64);
+  if (charsWithRefs.length === 0) return 100; // No references to check against
+
+  try {
+    const parts: any[] = [];
+
+    // Provide each reference
+    for (const char of charsWithRefs) {
+      parts.push({ inlineData: { mimeType: char.mime_type || 'image/jpeg', data: char.fetchedBase64 } });
+      parts.push({ text: `Reference for "${char.name}"` });
+    }
+
+    // Provide generated image
+    parts.push({ inlineData: { mimeType: 'image/png', data: generatedBase64 } });
+    parts.push({
+      text: `This is the generated storyboard panel. Compare each character's appearance in the generated image against their reference images above.\n\nFor each character, assess visual consistency: face shape, skin tone, hair color/style, and distinctive clothing/accessories.\n\nOutput a single integer 0-100 representing the overall character consistency score, where:\n100 = perfect match across all characters\n80-99 = minor deviations acceptable for a storyboard\n60-79 = noticeable differences but recognizable\n<60 = characters do not match their references\n\nRespond with ONLY the integer number, nothing else.`,
+    });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{ parts }],
+    });
+
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '75';
+    const score = parseInt(text.replace(/\D/g, ''));
+    return isNaN(score) ? 75 : Math.min(100, Math.max(0, score));
+  } catch {
+    return 75; // neutral fallback on error
+  }
 }
 
 // POST /api/generate
@@ -28,7 +157,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
 
   if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
   if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY not configured. Add it to .env file.' });
+    return res.status(500).json({ error: 'GEMINI_API_KEY not configured.' });
   }
 
   // Check generation credits
@@ -47,13 +176,12 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     });
   }
 
-  // Mark scene as loading
   if (sceneId) {
     await supabase.from('scenes').update({ status: 'loading', error_message: '' }).eq('id', sceneId);
   }
 
   try {
-    // Fetch project for style preset
+    // Fetch project style
     let stylePrompt = STYLE_PROMPTS.cinematic;
     if (projectId) {
       const { data: project } = await supabase.from('projects').select('style_preset').eq('id', projectId).single();
@@ -61,74 +189,48 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const parts: any[] = [];
-    const hasCharacterImages: boolean[] = [];
 
-    // Inject character references
-    if (characters?.length > 0) {
-      for (const char of characters) {
-        let gotImage = false;
+    // Pre-fetch all character reference images in parallel
+    const charData: CharData[] = await Promise.all(
+      (characters || []).map(async (char: CharInput) => {
+        let fetchedBase64 = '';
         if (char.reference_image_url) {
-          try {
-            const base64 = await fetchImageAsBase64(char.reference_image_url);
-            parts.push({ inlineData: { mimeType: char.mime_type || 'image/jpeg', data: base64 } });
-            parts.push({ text: `[Reference image for character: ${char.name}]` });
-            gotImage = true;
-          } catch {
-            // Skip image if fetch fails, still use text description
-          }
+          try { fetchedBase64 = await fetchImageAsBase64(char.reference_image_url); } catch { /* skip */ }
         }
-        hasCharacterImages.push(gotImage);
-      }
+        return { ...char, fetchedBase64 };
+      })
+    );
 
-      const charList = characters
-        .map((c: any, i: number) => `- ${c.name}: ${c.description}${hasCharacterImages[i] ? ' (reference image provided above)' : ''}`)
-        .join('\n');
+    // Attempt 1
+    const parts = buildPromptParts(charData, stylePrompt, prompt);
+    let { imageData, mimeType } = await runGeneration(ai, parts);
 
-      parts.push({
-        text: `Characters appearing in this scene:\n${charList}`,
+    // Consistency check after attempt 1
+    let consistencyScore = await checkConsistency(ai, charData, imageData);
+
+    // Auto-retry if consistency is poor (< 60) — stronger emphasis second pass
+    if (consistencyScore < 60 && charData.some(c => c.fetchedBase64 || c.visual_dna)) {
+      const retryParts = buildPromptParts(charData, stylePrompt,
+        `[RETRY - MAINTAIN CHARACTER CONSISTENCY] ${prompt}`
+      );
+      // Add extra emphasis at the end
+      retryParts.push({
+        text: 'IMPORTANT REMINDER: The characters in this panel MUST look identical to their reference images. This is the highest priority. Focus on matching their exact faces, hair, and clothing before anything else.',
       });
-    }
 
-    // Improved consistency-focused prompt
-    const hasRefs = hasCharacterImages.some(Boolean);
-    parts.push({
-      text: [
-        'You are a professional storyboard artist generating a single visual panel.',
-        hasRefs
-          ? 'CRITICAL INSTRUCTION: Character reference images are provided above. You MUST replicate each character\'s exact face shape, hairstyle, hair color, skin tone, body proportions, and clothing as shown. Visual consistency with the references is the top priority.'
-          : characters?.length > 0
-            ? 'Render each character consistently with their description. Ensure their appearance could be identified across multiple panels.'
-            : '',
-        `Art style: ${stylePrompt}.`,
-        `Scene to illustrate: ${prompt}`,
-        'Output a single polished storyboard illustration. No text overlays, watermarks, or borders.',
-      ].filter(Boolean).join('\n\n'),
-    });
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-exp',
-      contents: [{ parts }],
-      config: { responseModalities: ['IMAGE', 'TEXT'] },
-    });
-
-    // Extract generated image
-    let imageData = '';
-    let mimeType = 'image/png';
-    for (const candidate of response.candidates || []) {
-      for (const part of candidate.content?.parts || []) {
-        if (part.inlineData) {
-          imageData = part.inlineData.data || '';
-          mimeType = part.inlineData.mimeType || 'image/png';
-          break;
+      try {
+        const retry = await runGeneration(ai, retryParts);
+        const retryScore = await checkConsistency(ai, charData, retry.imageData);
+        // Keep whichever attempt scored higher
+        if (retryScore > consistencyScore) {
+          imageData = retry.imageData;
+          mimeType = retry.mimeType;
+          consistencyScore = retryScore;
         }
-      }
-      if (imageData) break;
+      } catch { /* keep attempt 1 */ }
     }
 
-    if (!imageData) throw new Error('No image was generated. The model did not return image data.');
-
-    // Upload to Supabase Storage
+    // Upload best result to Storage
     const imagePath = `scenes/${sceneId || Date.now()}.png`;
     const imageBuffer = Buffer.from(imageData, 'base64');
 
@@ -142,33 +244,31 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       .from('generated-scenes')
       .getPublicUrl(imagePath);
 
-    // Update scene record
+    // Persist scene state + consistency score
     if (sceneId) {
       await supabase.from('scenes').update({
         status: 'success',
         generated_image_url: publicUrl,
         error_message: '',
+        consistency_score: consistencyScore,
       }).eq('id', sceneId);
     }
 
-    // Increment user generation count
-    await supabase
-      .from('profiles')
-      .update({ total_generations: used + 1 })
-      .eq('id', userId);
+    // Increment credit counter
+    await supabase.from('profiles').update({ total_generations: used + 1 }).eq('id', userId);
 
-    // Update project thumbnail if not set
+    // Update project thumbnail if unset
     if (projectId) {
-      const { data: project } = await supabase.from('projects').select('thumbnail_url').eq('id', projectId).single();
-      const updateData: any = { updated_at: new Date().toISOString() };
-      if (!project?.thumbnail_url) updateData.thumbnail_url = publicUrl;
-      await supabase.from('projects').update(updateData).eq('id', projectId);
+      const { data: proj } = await supabase.from('projects').select('thumbnail_url').eq('id', projectId).single();
+      const upd: any = { updated_at: new Date().toISOString() };
+      if (!proj?.thumbnail_url) upd.thumbnail_url = publicUrl;
+      await supabase.from('projects').update(upd).eq('id', projectId);
     }
 
-    res.json({ imageUrl: publicUrl, success: true, creditsRemaining: limit - used - 1 });
+    res.json({ imageUrl: publicUrl, success: true, consistencyScore, creditsRemaining: limit - used - 1 });
+
   } catch (err: any) {
     console.error('Generate error:', err);
-
     if (sceneId) {
       try {
         await supabase.from('scenes').update({
@@ -177,7 +277,6 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
         }).eq('id', sceneId);
       } catch { /* ignore */ }
     }
-
     res.status(500).json({ error: err.message || 'Generation failed' });
   }
 });

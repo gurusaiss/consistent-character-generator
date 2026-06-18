@@ -14,10 +14,12 @@
   "dependencies": {
     "@google/genai": "^1.20.0",
     "@supabase/supabase-js": "^2.108.1",
+    "@types/jszip": "^3.4.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jspdf": "^4.2.1",
+    "jszip": "^3.10.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-hot-toast": "^2.4.1",

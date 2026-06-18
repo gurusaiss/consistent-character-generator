@@ -20,6 +20,7 @@ export interface Character {
   description: string;
   reference_image_url: string;
   mime_type: string;
+  visual_dna: string;
   created_at: string;
 }
 
@@ -31,6 +32,7 @@ export interface Scene {
   status: 'pending' | 'loading' | 'success' | 'error';
   generated_image_url: string;
   error_message: string;
+  consistency_score: number | null;
   created_at: string;
 }
 
@@ -43,12 +45,15 @@ export interface GenerateRequest {
     description: string;
     reference_image_url: string;
     mime_type: string;
+    visual_dna: string;
   }[];
 }
 
 export interface GenerateResponse {
   imageUrl: string;
   success: boolean;
+  consistencyScore?: number | null;
+  creditsRemaining?: number;
 }
 
 export const STYLE_PRESETS = [

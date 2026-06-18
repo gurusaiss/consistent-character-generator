@@ -10,6 +10,7 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Editor from './pages/Editor';
 import Gallery from './pages/Gallery';
+import ShareView from './pages/ShareView';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -38,6 +39,7 @@ function AppRoutes() {
           <Route path="/dashboard" element={<ProtectedRoute><ErrorBoundary><Dashboard /></ErrorBoundary></ProtectedRoute>} />
           <Route path="/editor/:projectId" element={<ProtectedRoute><ErrorBoundary><Editor /></ErrorBoundary></ProtectedRoute>} />
           <Route path="/gallery" element={<ProtectedRoute><ErrorBoundary><Gallery /></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/share/:projectId" element={<ShareView />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

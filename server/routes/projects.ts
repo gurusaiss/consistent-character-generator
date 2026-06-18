@@ -63,12 +63,13 @@ router.get('/:id', requireAuth, async (req, res) => {
 // PUT /api/projects/:id
 router.put('/:id', requireAuth, async (req, res) => {
   const userId = (req as AuthRequest).user.id;
-  const { name, description, style_preset } = req.body;
+  const { name, description, style_preset, is_public } = req.body;
 
   const updates: Record<string, any> = { updated_at: new Date().toISOString() };
   if (name !== undefined) updates.name = name;
   if (description !== undefined) updates.description = description;
   if (style_preset !== undefined) updates.style_preset = style_preset;
+  if (is_public !== undefined) updates.is_public = is_public;
 
   const { data, error } = await supabase
     .from('projects')

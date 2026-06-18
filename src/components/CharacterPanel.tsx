@@ -46,7 +46,14 @@ export default function CharacterPanel({ characters, onAdd, onEdit, onDelete }: 
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-200 text-sm truncate">{char.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-medium text-slate-200 text-sm truncate">{char.name}</p>
+                    {char.visual_dna && (
+                      <span title="Visual DNA extracted — high consistency" className="shrink-0 text-[9px] bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 px-1.5 py-0.5 rounded-full">
+                        DNA
+                      </span>
+                    )}
+                  </div>
                   {char.description && (
                     <p className="text-slate-500 text-xs mt-0.5 line-clamp-2">{char.description}</p>
                   )}

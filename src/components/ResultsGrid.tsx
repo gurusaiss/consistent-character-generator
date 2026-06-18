@@ -94,6 +94,16 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
                   <div className="absolute top-2 left-2 bg-black/50 backdrop-blur text-xs text-white px-2 py-0.5 rounded-full">
                     Scene {scene.scene_number}
                   </div>
+                  {scene.consistency_score !== null && (
+                    <div className={`absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      (scene.consistency_score ?? 0) >= 85 ? 'bg-emerald-500/90 text-white' :
+                      (scene.consistency_score ?? 0) >= 70 ? 'bg-yellow-500/90 text-black' :
+                      (scene.consistency_score ?? 0) >= 55 ? 'bg-orange-500/90 text-white' :
+                      'bg-red-500/90 text-white'
+                    }`}>
+                      {scene.consistency_score}%
+                    </div>
+                  )}
                 </div>
               ) : scene.status === 'loading' ? (
                 <div className="h-40 flex flex-col items-center justify-center gap-2">

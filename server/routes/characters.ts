@@ -1,7 +1,38 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { GoogleGenAI } from '@google/genai';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+
+async function extractCharacterDNA(base64: string, mimeType: string, name: string): Promise<string> {
+  if (!process.env.GEMINI_API_KEY) return '';
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{
+        parts: [
+          { inlineData: { mimeType, data: base64 } },
+          {
+            text: `You are a character designer building a visual DNA profile for consistent AI storyboard generation.
+
+Analyze this reference image of character "${name}" and produce a precise visual specification covering:
+FACE: face shape, skin tone (e.g. "warm olive", "deep brown", "pale ivory"), eye color+shape, nose, lips, eyebrows, marks
+HAIR: exact color (e.g. "jet black", "golden blonde"), length, texture, style
+BUILD: body type, shoulder width, posture
+CLOTHING: every visible item with exact colors, patterns, fabrics
+DISTINCTIVE: accessories, tattoos, scars, unique features
+
+Output a single dense paragraph (no headers, no bullets) optimized for injection into AI image prompts. Be extremely specific about colors and proportions. This will be embedded verbatim into every scene generation prompt to guarantee visual consistency across all panels.`,
+          },
+        ],
+      }],
+    });
+    return response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  } catch {
+    return '';
+  }
+}
 
 const router = Router();
 
@@ -48,10 +79,14 @@ router.post('/projects/:id/characters', requireAuth, async (req, res) => {
 
   const charId = uuidv4();
   let reference_image_url = '';
+  let visual_dna = '';
 
   if (base_image) {
     try {
-      reference_image_url = await uploadCharacterImage(base_image, mime_type, charId);
+      [reference_image_url, visual_dna] = await Promise.all([
+        uploadCharacterImage(base_image, mime_type, charId),
+        extractCharacterDNA(base_image, mime_type, name),
+      ]);
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -59,7 +94,7 @@ router.post('/projects/:id/characters', requireAuth, async (req, res) => {
 
   const { data, error } = await supabase
     .from('characters')
-    .insert({ id: charId, project_id: req.params.id, name, description, reference_image_url, mime_type })
+    .insert({ id: charId, project_id: req.params.id, name, description, reference_image_url, mime_type, visual_dna })
     .select()
     .single();
 
@@ -96,7 +131,11 @@ router.put('/characters/:id', requireAuth, async (req, res) => {
     // Upload new image
     try {
       const mimeStr = String(mime_type || 'image/jpeg');
-      updates.reference_image_url = await uploadCharacterImage(String(base_image), mimeStr, String(req.params.id));
+      const charName = name || existing.name;
+      [updates.reference_image_url, updates.visual_dna] = await Promise.all([
+        uploadCharacterImage(String(base_image), mimeStr, String(req.params.id)),
+        extractCharacterDNA(String(base_image), mimeStr, charName),
+      ]);
       updates.mime_type = mimeStr;
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
