@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Navbar() {
-  const { user, signOut } = useAuth();
+  const { user, usage, signOut } = useAuth();
   const navigate = useNavigate();
 
   async function handleSignOut() {
@@ -15,6 +15,12 @@ export default function Navbar() {
       toast.error('Sign out failed');
     }
   }
+
+  const creditsColor =
+    usage == null ? 'text-slate-500' :
+    usage.remaining <= 5 ? 'text-red-400' :
+    usage.remaining <= 10 ? 'text-amber-400' :
+    'text-emerald-400';
 
   return (
     <nav className="sticky top-0 z-50 border-b border-white/5" style={{ backgroundColor: 'rgba(7,7,26,0.85)', backdropFilter: 'blur(16px)' }}>
@@ -54,13 +60,21 @@ export default function Navbar() {
 
           {user ? (
             <div className="flex items-center gap-2 ml-2">
-              <span className="text-slate-500 text-xs hidden sm:block truncate max-w-[120px]">
+              {usage !== null && (
+                <div
+                  title={`${usage.used} of ${usage.limit} generations used`}
+                  className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 ${creditsColor}`}
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                  </svg>
+                  <span>{usage.remaining} / {usage.limit}</span>
+                </div>
+              )}
+              <span className="text-slate-500 text-xs hidden lg:block truncate max-w-[120px]">
                 {user.email}
               </span>
-              <button
-                onClick={handleSignOut}
-                className="btn-secondary text-sm py-1.5 px-3"
-              >
+              <button onClick={handleSignOut} className="btn-secondary text-sm py-1.5 px-3">
                 Sign Out
               </button>
             </div>

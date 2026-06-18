@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import type { Project, Character, Scene } from '../types';
 import { STYLE_PRESETS } from '../types';
 import { exportStoryboardPDF, type PdfFormat } from '../utils/exportPDF';
@@ -13,6 +14,7 @@ import ImageModal from '../components/ImageModal';
 export default function Editor() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const { refreshUsage } = useAuth();
 
   const [project, setProject] = useState<Project | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -215,6 +217,7 @@ export default function Editor() {
             : s
         )
       );
+      refreshUsage();
     } catch (err: any) {
       setScenes((prev) =>
         prev.map((s) =>
@@ -269,6 +272,19 @@ export default function Editor() {
   }
 
   const generatedCount = scenes.filter(s => s.generated_image_url).length;
+  const failedCount = scenes.filter(s => s.status === 'error').length;
+  const pendingCount = scenes.filter(s => s.status === 'pending').length;
+
+  async function handleRetryFailed() {
+    const failed = scenes.filter((s) => s.status === 'error');
+    if (failed.length === 0) return;
+    setGeneratingAll(true);
+    toast.success(`Retrying ${failed.length} failed scene${failed.length !== 1 ? 's' : ''}…`);
+    for (const scene of failed) {
+      await generateScene(scene);
+    }
+    setGeneratingAll(false);
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
@@ -300,15 +316,23 @@ export default function Editor() {
               Export PDF
             </button>
           )}
+          {failedCount > 0 && !generatingAll && (
+            <button
+              onClick={handleRetryFailed}
+              className="text-sm py-2 px-3 rounded-lg bg-red-600/15 border border-red-500/30 text-red-400 hover:bg-red-600/25 transition-all"
+            >
+              Retry {failedCount} Failed
+            </button>
+          )}
           <span className="text-slate-500 text-sm hidden sm:block">
-            {characters.length} char · {scenes.length} scenes
+            {characters.length} char · {pendingCount > 0 ? `${pendingCount} pending` : `${scenes.length} scenes`}
           </span>
           <button
             onClick={handleGenerateAll}
             disabled={generatingAll || scenes.length === 0}
             className="btn-primary text-sm py-2 disabled:opacity-40"
           >
-            {generatingAll ? 'Generating…' : 'Generate All'}
+            {generatingAll ? 'Generating…' : `Generate All${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
           </button>
         </div>
       </div>

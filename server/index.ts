@@ -7,6 +7,7 @@ import projectsRouter from './routes/projects.js';
 import charactersRouter from './routes/characters.js';
 import scenesRouter from './routes/scenes.js';
 import generateRouter from './routes/generate.js';
+import profileRouter from './routes/profile.js';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config({ path: '.env' });
@@ -33,6 +34,7 @@ app.use('/api/projects', projectsRouter);
 app.use('/api', charactersRouter);
 app.use('/api', scenesRouter);
 app.use('/api', generateRouter);
+app.use('/api', profileRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

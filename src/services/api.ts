@@ -86,4 +86,9 @@ export const api = {
 
   generate: (data: GenerateRequest): Promise<GenerateResponse> =>
     post('/api/generate', data),
+
+  profile: {
+    usage: (): Promise<{ used: number; limit: number; remaining: number }> =>
+      get('/api/profile/usage'),
+  },
 };

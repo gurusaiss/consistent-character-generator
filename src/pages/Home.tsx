@@ -39,10 +39,10 @@ const steps = [
   { num: '03', title: 'Generate with AI', desc: 'Click Generate and watch your storyboard come to life with consistent characters.' },
 ];
 
-const stats = [
-  { value: '10K+', label: 'Images Generated' },
-  { value: '500+', label: 'Stories Created' },
-  { value: '99%', label: 'Consistency Rate' },
+const tiers = [
+  { value: '30', label: 'Free Generations', sub: 'No credit card required' },
+  { value: '6', label: 'Art Style Presets', sub: 'Cinematic, Anime, Comic & more' },
+  { value: '∞', label: 'Projects & Characters', sub: 'Unlimited storage' },
 ];
 
 export default function Home() {
@@ -97,14 +97,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Free tier highlights */}
       <section className="border-y border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-3 gap-8 text-center">
-            {stats.map(({ value, label }) => (
+            {tiers.map(({ value, label, sub }) => (
               <div key={label}>
                 <div className="text-3xl sm:text-4xl font-extrabold gradient-text">{value}</div>
-                <div className="text-slate-500 text-sm mt-1">{label}</div>
+                <div className="text-slate-300 text-sm font-medium mt-1">{label}</div>
+                <div className="text-slate-500 text-xs mt-0.5">{sub}</div>
               </div>
             ))}
           </div>
