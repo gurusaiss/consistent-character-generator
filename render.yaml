@@ -1,0 +1,32 @@
+# Render Blueprint — one service that serves both the API and the built frontend.
+# Deploy: Render Dashboard → New → Blueprint → connect this repo.
+# Then fill in the environment variable values marked sync:false.
+services:
+  - type: web
+    name: consistentai
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    # --include=dev so Vite/TypeScript/tsx (devDependencies) are available
+    # for the build AND for `npm start` (which runs the TS server via tsx).
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      # Optional — enables the second FLUX generation model (Together AI).
+      # Leave unset and the app runs on Gemini alone.
+      - key: TOGETHER_API_KEY
+        sync: false
