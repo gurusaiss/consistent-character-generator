@@ -67,12 +67,28 @@ export default function Gallery() {
     ? items
     : items.filter((item) => item.projectId === filterProject);
 
+  const scored = filtered.filter((i) => i.scene.consistency_score !== null);
+  const avgConsistency = scored.length > 0
+    ? Math.round(scored.reduce((sum, i) => sum + (i.scene.consistency_score ?? 0), 0) / scored.length)
+    : null;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold gradient-text">Gallery</h1>
-          <p className="text-slate-400 mt-1">{filtered.length} image{filtered.length !== 1 ? 's' : ''}</p>
+          <p className="text-slate-400 mt-1">
+            {filtered.length} image{filtered.length !== 1 ? 's' : ''}
+            {avgConsistency !== null && (
+              <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                avgConsistency >= 85 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25' :
+                avgConsistency >= 70 ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/25' :
+                'bg-orange-500/15 text-orange-400 border border-orange-500/25'
+              }`}>
+                ~{avgConsistency}% avg consistency
+              </span>
+            )}
+          </p>
         </div>
         {projects.length > 0 && (
           <select
@@ -142,6 +158,26 @@ export default function Gallery() {
                 </div>
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur text-xs text-white px-2 py-0.5 rounded-full">
                   View
+                </div>
+                {/* Consistency + model badges (always visible) */}
+                <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                  {scene.consistency_score !== null && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full backdrop-blur ${
+                      scene.consistency_score >= 85 ? 'bg-emerald-500/85 text-white' :
+                      scene.consistency_score >= 70 ? 'bg-yellow-500/85 text-black' :
+                      scene.consistency_score >= 55 ? 'bg-orange-500/85 text-white' :
+                      'bg-red-500/85 text-white'
+                    }`}>
+                      {scene.consistency_score}%
+                    </span>
+                  )}
+                  {scene.model_used && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full backdrop-blur ${
+                      scene.model_used === 'flux' ? 'bg-amber-500/85 text-black' : 'bg-violet-600/85 text-white'
+                    }`}>
+                      {scene.model_used === 'flux' ? '⚡' : '🟣'}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="px-3 py-2">

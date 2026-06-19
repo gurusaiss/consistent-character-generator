@@ -46,7 +46,28 @@ export default function ImageModal({ scene, onClose, projectName }: Props) {
         <div className="flex items-center justify-between p-4 border-b border-white/5">
           <div>
             {projectName && <p className="text-slate-500 text-xs">{projectName}</p>}
-            <p className="text-slate-200 font-medium">Scene {scene.scene_number}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-slate-200 font-medium">Scene {scene.scene_number}</p>
+              {scene.consistency_score !== null && (
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                  scene.consistency_score >= 85 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                  scene.consistency_score >= 70 ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
+                  scene.consistency_score >= 55 ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
+                  'bg-red-500/20 text-red-400 border border-red-500/30'
+                }`}>
+                  {scene.consistency_score}% consistent
+                </span>
+              )}
+              {scene.model_used && (
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                  scene.model_used === 'flux'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'bg-violet-600/20 text-violet-300 border border-violet-500/30'
+                }`}>
+                  {scene.model_used === 'flux' ? '⚡ FLUX' : '🟣 Gemini'}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {scene.generated_image_url && (

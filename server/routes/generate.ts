@@ -121,6 +121,39 @@ async function runGeminiGeneration(ai: GoogleGenAI, parts: any[]): Promise<{ ima
   return { imageData, mimeType };
 }
 
+async function scoreConsistencyOnce(
+  ai: GoogleGenAI,
+  charsWithRefs: CharData[],
+  generatedBase64: string,
+): Promise<number | null> {
+  const parts: any[] = [];
+  for (const char of charsWithRefs) {
+    parts.push({ inlineData: { mimeType: char.mime_type || 'image/jpeg', data: char.fetchedBase64 } });
+    parts.push({ text: `Reference for "${char.name}"` });
+  }
+  parts.push({ inlineData: { mimeType: 'image/png', data: generatedBase64 } });
+  parts.push({
+    text: `This is the generated storyboard panel. Compare each character's appearance against their reference images above.\n\nAssess visual consistency: face shape, skin tone, hair color/style, and distinctive clothing/accessories.\n\nOutput a single integer 0-100 representing overall character consistency:\n100 = perfect match\n80-99 = minor acceptable deviations\n60-79 = noticeable differences but recognizable\n<60 = characters do not match references\n\nRespond with ONLY the integer number, nothing else.`,
+  });
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.0-flash',
+    contents: [{ parts }],
+  });
+
+  const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  // Use first digit group only — avoids "85/100" parsing to 85100
+  const match = text.match(/\d+/)?.[0];
+  if (!match) return null;
+  const score = parseInt(match);
+  return isNaN(score) ? null : Math.min(100, Math.max(0, score));
+}
+
+/**
+ * Median-of-3 consistency scoring. A single LLM vote is noisy and can pick the
+ * wrong model or wrongly skip the retry. Three parallel votes + median gives a
+ * far more reliable score for winner selection. Falls back gracefully if votes fail.
+ */
 async function checkConsistency(
   ai: GoogleGenAI,
   chars: CharData[],
@@ -130,25 +163,21 @@ async function checkConsistency(
   if (charsWithRefs.length === 0) return 100;
 
   try {
-    const parts: any[] = [];
-    for (const char of charsWithRefs) {
-      parts.push({ inlineData: { mimeType: char.mime_type || 'image/jpeg', data: char.fetchedBase64 } });
-      parts.push({ text: `Reference for "${char.name}"` });
-    }
-    parts.push({ inlineData: { mimeType: 'image/png', data: generatedBase64 } });
-    parts.push({
-      text: `This is the generated storyboard panel. Compare each character's appearance against their reference images above.\n\nAssess visual consistency: face shape, skin tone, hair color/style, and distinctive clothing/accessories.\n\nOutput a single integer 0-100 representing overall character consistency:\n100 = perfect match\n80-99 = minor acceptable deviations\n60-79 = noticeable differences but recognizable\n<60 = characters do not match references\n\nRespond with ONLY the integer number, nothing else.`,
-    });
+    const votes = await Promise.allSettled([
+      scoreConsistencyOnce(ai, charsWithRefs, generatedBase64),
+      scoreConsistencyOnce(ai, charsWithRefs, generatedBase64),
+      scoreConsistencyOnce(ai, charsWithRefs, generatedBase64),
+    ]);
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: [{ parts }],
-    });
+    const scores = votes
+      .filter((v): v is PromiseFulfilledResult<number | null> => v.status === 'fulfilled')
+      .map(v => v.value)
+      .filter((s): s is number => s !== null)
+      .sort((a, b) => a - b);
 
-    const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '75';
-    // Use first digit group only — avoids "85/100" parsing to 85100
-    const score = parseInt(text.match(/\d+/)?.[0] ?? '75');
-    return isNaN(score) ? 75 : Math.min(100, Math.max(0, score));
+    if (scores.length === 0) return 75; // neutral fallback
+    // Median — robust to a single outlier vote
+    return scores[Math.floor(scores.length / 2)];
   } catch {
     return 75;
   }
