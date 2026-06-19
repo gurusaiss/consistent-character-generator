@@ -33,6 +33,7 @@ export interface Scene {
   generated_image_url: string;
   error_message: string;
   consistency_score: number | null;
+  model_used: string | null;
   created_at: string;
 }
 
@@ -53,6 +54,8 @@ export interface GenerateResponse {
   imageUrl: string;
   success: boolean;
   consistencyScore?: number | null;
+  modelUsed?: string | null;
+  modelsContested?: number;
   creditsRemaining?: number;
 }
 

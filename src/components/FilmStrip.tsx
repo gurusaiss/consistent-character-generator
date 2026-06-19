@@ -117,6 +117,19 @@ export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRe
                   </div>
                 )}
 
+                {/* Model badge */}
+                {isSuccess && scene.model_used && (
+                  <div className={`absolute bottom-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                    scene.model_used === 'flux'
+                      ? 'bg-amber-500/85 text-black'
+                      : scene.model_used === 'gemini-retry'
+                        ? 'bg-orange-500/85 text-white'
+                        : 'bg-violet-600/85 text-white'
+                  }`}>
+                    {scene.model_used === 'flux' ? '⚡ FLUX' : '🟣 Gemini'}
+                  </div>
+                )}
+
                 {/* Hover overlay */}
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 flex items-center justify-center gap-1.5">
                   {isError && (

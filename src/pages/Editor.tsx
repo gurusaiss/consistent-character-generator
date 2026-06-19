@@ -286,7 +286,8 @@ export default function Editor() {
         prev.map((s) =>
           s.id === scene.id
             ? { ...s, status: 'success', generated_image_url: result.imageUrl,
-                consistency_score: result.consistencyScore ?? null, error_message: '' }
+                consistency_score: result.consistencyScore ?? null,
+                model_used: result.modelUsed ?? null, error_message: '' }
             : s
         )
       );
@@ -353,6 +354,9 @@ export default function Editor() {
   const failedCount = scenes.filter(s => s.status === 'error').length;
   const pendingCount = scenes.filter(s => s.status === 'pending').length;
   const generatedScenes = scenes.filter(s => s.generated_image_url);
+  const geminiWins = scenes.filter(s => s.model_used === 'gemini' || s.model_used === 'gemini-retry').length;
+  const fluxWins = scenes.filter(s => s.model_used === 'flux').length;
+  const fluxAvailable = fluxWins > 0 || geminiWins > 0; // inferred from data
   const presentScene = generatedScenes[Math.min(presentIndex, generatedScenes.length - 1)];
 
   const avgConsistency = (() => {
@@ -468,6 +472,27 @@ export default function Editor() {
             onDelete={handleDeleteScene}
             onRetry={generateScene}
           />
+        </div>
+      )}
+
+      {/* ── Model competition stats bar ── */}
+      {fluxAvailable && (
+        <div className="shrink-0 px-4 py-1.5 flex items-center gap-4 border-b border-white/5 text-xs"
+          style={{ backgroundColor: 'rgba(5,5,16,0.9)' }}>
+          <span className="text-slate-600 uppercase tracking-widest">AI Competition</span>
+          {geminiWins > 0 && (
+            <span className="flex items-center gap-1.5 text-violet-400">
+              <span className="w-2 h-2 rounded-full bg-violet-500" />
+              Gemini won {geminiWins} scene{geminiWins !== 1 ? 's' : ''}
+            </span>
+          )}
+          {fluxWins > 0 && (
+            <span className="flex items-center gap-1.5 text-amber-400">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              FLUX won {fluxWins} scene{fluxWins !== 1 ? 's' : ''}
+            </span>
+          )}
+          <span className="text-slate-600 ml-auto">Best result auto-selected by consistency score</span>
         </div>
       )}
 

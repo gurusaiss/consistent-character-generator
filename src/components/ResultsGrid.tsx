@@ -91,8 +91,19 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
                       Download
                     </button>
                   </div>
-                  <div className="absolute top-2 left-2 bg-black/50 backdrop-blur text-xs text-white px-2 py-0.5 rounded-full">
-                    Scene {scene.scene_number}
+                  <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                    <span className="bg-black/50 backdrop-blur text-xs text-white px-2 py-0.5 rounded-full">
+                      Scene {scene.scene_number}
+                    </span>
+                    {scene.model_used && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur ${
+                        scene.model_used === 'flux'
+                          ? 'bg-amber-500/85 text-black'
+                          : 'bg-violet-600/85 text-white'
+                      }`}>
+                        {scene.model_used === 'flux' ? '⚡ FLUX' : '🟣 Gemini'}
+                      </span>
+                    )}
                   </div>
                   {scene.consistency_score !== null && (
                     <div className={`absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full ${

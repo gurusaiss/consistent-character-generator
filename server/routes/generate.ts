@@ -3,6 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { generateRateLimiter } from '../middleware/rateLimiter.js';
+import { generateWithFlux } from '../services/fluxGenerate.js';
 
 const router = Router();
 
@@ -34,6 +35,13 @@ interface CharData extends CharInput {
   fetchedBase64: string;
 }
 
+interface Candidate {
+  imageData: string;
+  mimeType: string;
+  model: string;
+  score: number;
+}
+
 function buildPromptParts(chars: CharData[], stylePrompt: string, scenePrompt: string): any[] {
   const parts: any[] = [];
   const withImages = chars.filter(c => c.fetchedBase64);
@@ -44,7 +52,7 @@ function buildPromptParts(chars: CharData[], stylePrompt: string, scenePrompt: s
     parts.push({ text: `↑ Visual reference for "${char.name}" — match this character's appearance exactly.` });
   }
 
-  // 2. Character DNA specs (the secret sauce for consistency)
+  // 2. Character DNA specs
   if (chars.length > 0) {
     const charSpecs = chars.map(c => {
       const lines = [`CHARACTER: ${c.name}`];
@@ -53,7 +61,6 @@ function buildPromptParts(chars: CharData[], stylePrompt: string, scenePrompt: s
       if (c.fetchedBase64) lines.push(`(Reference image provided above — replicate exactly)`);
       return lines.join('\n');
     }).join('\n\n');
-
     parts.push({ text: `=== CHARACTER SPECIFICATIONS ===\n${charSpecs}\n=== END SPECIFICATIONS ===` });
   }
 
@@ -90,7 +97,7 @@ function buildPromptParts(chars: CharData[], stylePrompt: string, scenePrompt: s
   return parts;
 }
 
-async function runGeneration(ai: GoogleGenAI, parts: any[]): Promise<{ imageData: string; mimeType: string }> {
+async function runGeminiGeneration(ai: GoogleGenAI, parts: any[]): Promise<{ imageData: string; mimeType: string }> {
   const response = await ai.models.generateContent({
     model: 'gemini-2.0-flash-exp',
     contents: [{ parts }],
@@ -120,21 +127,17 @@ async function checkConsistency(
   generatedBase64: string,
 ): Promise<number> {
   const charsWithRefs = chars.filter(c => c.fetchedBase64);
-  if (charsWithRefs.length === 0) return 100; // No references to check against
+  if (charsWithRefs.length === 0) return 100;
 
   try {
     const parts: any[] = [];
-
-    // Provide each reference
     for (const char of charsWithRefs) {
       parts.push({ inlineData: { mimeType: char.mime_type || 'image/jpeg', data: char.fetchedBase64 } });
       parts.push({ text: `Reference for "${char.name}"` });
     }
-
-    // Provide generated image
     parts.push({ inlineData: { mimeType: 'image/png', data: generatedBase64 } });
     parts.push({
-      text: `This is the generated storyboard panel. Compare each character's appearance in the generated image against their reference images above.\n\nFor each character, assess visual consistency: face shape, skin tone, hair color/style, and distinctive clothing/accessories.\n\nOutput a single integer 0-100 representing the overall character consistency score, where:\n100 = perfect match across all characters\n80-99 = minor deviations acceptable for a storyboard\n60-79 = noticeable differences but recognizable\n<60 = characters do not match their references\n\nRespond with ONLY the integer number, nothing else.`,
+      text: `This is the generated storyboard panel. Compare each character's appearance against their reference images above.\n\nAssess visual consistency: face shape, skin tone, hair color/style, and distinctive clothing/accessories.\n\nOutput a single integer 0-100 representing overall character consistency:\n100 = perfect match\n80-99 = minor acceptable deviations\n60-79 = noticeable differences but recognizable\n<60 = characters do not match references\n\nRespond with ONLY the integer number, nothing else.`,
     });
 
     const response = await ai.models.generateContent({
@@ -143,10 +146,11 @@ async function checkConsistency(
     });
 
     const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '75';
+    // Use first digit group only — avoids "85/100" parsing to 85100
     const score = parseInt(text.match(/\d+/)?.[0] ?? '75');
     return isNaN(score) ? 75 : Math.min(100, Math.max(0, score));
   } catch {
-    return 75; // neutral fallback on error
+    return 75;
   }
 }
 
@@ -160,7 +164,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     return res.status(500).json({ error: 'GEMINI_API_KEY not configured.' });
   }
 
-  // Check generation credits
+  // Check credits
   const { data: profile } = await supabase
     .from('profiles')
     .select('total_generations, generations_limit')
@@ -201,36 +205,63 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       })
     );
 
-    // Attempt 1
-    const parts = buildPromptParts(charData, stylePrompt, prompt);
-    let { imageData, mimeType } = await runGeneration(ai, parts);
+    const geminiParts = buildPromptParts(charData, stylePrompt, prompt);
 
-    // Consistency check after attempt 1
-    let consistencyScore = await checkConsistency(ai, charData, imageData);
+    // ── Run Gemini + FLUX in parallel ──────────────────────────────────────
+    const [geminiSettled, fluxSettled] = await Promise.allSettled([
+      runGeminiGeneration(ai, geminiParts),
+      generateWithFlux(prompt, stylePrompt, charData.map(c => ({
+        name: c.name,
+        visual_dna: c.visual_dna,
+        description: c.description,
+      }))),
+    ]);
 
-    // Auto-retry if consistency is poor (< 60) — stronger emphasis second pass
-    if (consistencyScore < 60 && charData.some(c => c.fetchedBase64 || c.visual_dna)) {
+    // Score each successful result
+    const candidates: Candidate[] = [];
+
+    if (geminiSettled.status === 'fulfilled') {
+      const { imageData, mimeType } = geminiSettled.value;
+      const score = await checkConsistency(ai, charData, imageData);
+      candidates.push({ imageData, mimeType, model: 'gemini', score });
+    } else {
+      console.error('Gemini generation failed:', geminiSettled.reason?.message);
+    }
+
+    if (fluxSettled.status === 'fulfilled' && fluxSettled.value) {
+      const { imageData, mimeType } = fluxSettled.value;
+      const score = await checkConsistency(ai, charData, imageData);
+      candidates.push({ imageData, mimeType, model: 'flux', score });
+    }
+
+    if (candidates.length === 0) {
+      throw new Error('All generation models failed. Please try again.');
+    }
+
+    // Pick the winner — highest consistency score
+    let winner = candidates.reduce((best, c) => c.score > best.score ? c : best, candidates[0]);
+
+    // Auto-retry with Gemini if winner score < 60 (stronger emphasis pass)
+    if (winner.score < 60 && charData.some(c => c.fetchedBase64 || c.visual_dna)) {
       const retryParts = buildPromptParts(charData, stylePrompt,
-        `[RETRY - MAINTAIN CHARACTER CONSISTENCY] ${prompt}`
+        `[CONSISTENCY RETRY] ${prompt}`
       );
-      // Add extra emphasis at the end
       retryParts.push({
-        text: 'IMPORTANT REMINDER: The characters in this panel MUST look identical to their reference images. This is the highest priority. Focus on matching their exact faces, hair, and clothing before anything else.',
+        text: 'CRITICAL REMINDER: The characters in this panel MUST look identical to their reference images above. This is the absolute highest priority. Focus entirely on matching their exact face, hair color, skin tone, and clothing before anything else.',
       });
 
       try {
-        const retry = await runGeneration(ai, retryParts);
+        const retry = await runGeminiGeneration(ai, retryParts);
         const retryScore = await checkConsistency(ai, charData, retry.imageData);
-        // Keep whichever attempt scored higher
-        if (retryScore > consistencyScore) {
-          imageData = retry.imageData;
-          mimeType = retry.mimeType;
-          consistencyScore = retryScore;
+        if (retryScore > winner.score) {
+          winner = { ...retry, model: 'gemini-retry', score: retryScore };
         }
-      } catch { /* keep attempt 1 */ }
+      } catch { /* keep current winner */ }
     }
 
-    // Upload best result to Storage
+    const { imageData, mimeType, model: modelUsed, score: consistencyScore } = winner;
+
+    // Upload winner to Storage
     const imagePath = `scenes/${sceneId || Date.now()}.png`;
     const imageBuffer = Buffer.from(imageData, 'base64');
 
@@ -244,21 +275,22 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       .from('generated-scenes')
       .getPublicUrl(imagePath);
 
-    // Persist scene state + consistency score
+    // Persist scene + consistency + model
     if (sceneId) {
       const { error: sceneUpdateErr } = await supabase.from('scenes').update({
         status: 'success',
         generated_image_url: publicUrl,
         error_message: '',
         consistency_score: consistencyScore,
+        model_used: modelUsed,
       }).eq('id', sceneId);
       if (sceneUpdateErr) console.error('Scene update failed:', sceneUpdateErr.message);
     }
 
-    // Increment credit counter
+    // Increment credits
     await supabase.from('profiles').update({ total_generations: used + 1 }).eq('id', userId);
 
-    // Update project thumbnail if unset
+    // Update project thumbnail
     if (projectId) {
       const { data: proj } = await supabase.from('projects').select('thumbnail_url').eq('id', projectId).single();
       const upd: any = { updated_at: new Date().toISOString() };
@@ -266,7 +298,15 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       await supabase.from('projects').update(upd).eq('id', projectId);
     }
 
-    res.json({ imageUrl: publicUrl, success: true, consistencyScore, creditsRemaining: limit - used - 1 });
+    const modelsContested = candidates.length;
+    res.json({
+      imageUrl: publicUrl,
+      success: true,
+      consistencyScore,
+      modelUsed,
+      modelsContested,
+      creditsRemaining: limit - used - 1,
+    });
 
   } catch (err: any) {
     console.error('Generate error:', err);
