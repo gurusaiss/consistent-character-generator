@@ -227,7 +227,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       if (project?.style_preset) stylePrompt = STYLE_PROMPTS[project.style_preset] || stylePrompt;
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { apiVersion: 'v1' } });
 
     // Pre-fetch all character reference images in parallel
     const charData: CharData[] = await Promise.all(
