@@ -97,28 +97,34 @@ function buildPromptParts(chars: CharData[], stylePrompt: string, scenePrompt: s
   return parts;
 }
 
-async function runGeminiGeneration(ai: GoogleGenAI, parts: any[]): Promise<{ imageData: string; mimeType: string }> {
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: [{ parts }],
-    config: { responseModalities: ['IMAGE', 'TEXT'] },
+function buildTextPrompt(chars: CharData[], stylePrompt: string, scenePrompt: string, retry = false): string {
+  const charLines = chars.map(c => {
+    const parts = [`Character "${c.name}"`];
+    if (c.visual_dna) parts.push(`Visual spec: ${c.visual_dna}`);
+    else if (c.description) parts.push(c.description);
+    return parts.join(' — ');
   });
 
-  let imageData = '';
-  let mimeType = 'image/png';
-  for (const candidate of response.candidates || []) {
-    for (const part of candidate.content?.parts || []) {
-      if (part.inlineData) {
-        imageData = part.inlineData.data || '';
-        mimeType = part.inlineData.mimeType || 'image/png';
-        break;
-      }
-    }
-    if (imageData) break;
-  }
+  return [
+    stylePrompt,
+    charLines.length ? `CHARACTERS: ${charLines.join('; ')}` : '',
+    retry ? `[CONSISTENCY PRIORITY] ${scenePrompt}` : scenePrompt,
+    'Single storyboard panel. No text overlays, no watermarks, no borders. Cinematic composition. All characters must exactly match their visual specifications.',
+  ].filter(Boolean).join('\n');
+}
 
-  if (!imageData) throw new Error('No image was generated. The model did not return image data.');
-  return { imageData, mimeType };
+async function runImagenGeneration(ai: GoogleGenAI, chars: CharData[], stylePrompt: string, scenePrompt: string, retry = false): Promise<{ imageData: string; mimeType: string }> {
+  const prompt = buildTextPrompt(chars, stylePrompt, scenePrompt, retry);
+
+  const response = await (ai.models as any).generateImages({
+    model: 'imagen-3.0-generate-002',
+    prompt,
+    config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
+  });
+
+  const imageBytes = response?.generatedImages?.[0]?.image?.imageBytes;
+  if (!imageBytes) throw new Error('Imagen returned no image data.');
+  return { imageData: imageBytes as string, mimeType: 'image/jpeg' };
 }
 
 async function scoreConsistencyOnce(
@@ -234,11 +240,9 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       })
     );
 
-    const geminiParts = buildPromptParts(charData, stylePrompt, prompt);
-
-    // ── Run Gemini + FLUX in parallel ──────────────────────────────────────
+    // ── Run Imagen + FLUX in parallel ──────────────────────────────────────
     const [geminiSettled, fluxSettled] = await Promise.allSettled([
-      runGeminiGeneration(ai, geminiParts),
+      runImagenGeneration(ai, charData, stylePrompt, prompt),
       generateWithFlux(prompt, stylePrompt, charData.map(c => ({
         name: c.name,
         visual_dna: c.visual_dna,
@@ -270,20 +274,13 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     // Pick the winner — highest consistency score
     let winner = candidates.reduce((best, c) => c.score > best.score ? c : best, candidates[0]);
 
-    // Auto-retry with Gemini if winner score < 60 (stronger emphasis pass)
+    // Auto-retry if winner score < 60 (stronger emphasis pass via retry=true)
     if (winner.score < 60 && charData.some(c => c.fetchedBase64 || c.visual_dna)) {
-      const retryParts = buildPromptParts(charData, stylePrompt,
-        `[CONSISTENCY RETRY] ${prompt}`
-      );
-      retryParts.push({
-        text: 'CRITICAL REMINDER: The characters in this panel MUST look identical to their reference images above. This is the absolute highest priority. Focus entirely on matching their exact face, hair color, skin tone, and clothing before anything else.',
-      });
-
       try {
-        const retry = await runGeminiGeneration(ai, retryParts);
+        const retry = await runImagenGeneration(ai, charData, stylePrompt, prompt, true);
         const retryScore = await checkConsistency(ai, charData, retry.imageData);
         if (retryScore > winner.score) {
-          winner = { ...retry, model: 'gemini-retry', score: retryScore };
+          winner = { ...retry, model: 'imagen-retry', score: retryScore };
         }
       } catch { /* keep current winner */ }
     }
