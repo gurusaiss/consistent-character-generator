@@ -99,7 +99,7 @@ function buildPromptParts(chars: CharData[], stylePrompt: string, scenePrompt: s
 
 async function runGeminiGeneration(ai: GoogleGenAI, parts: any[]): Promise<{ imageData: string; mimeType: string }> {
   const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-2.0-flash-preview-image-generation',
     contents: [{ parts }],
     config: { responseModalities: ['IMAGE', 'TEXT'] },
   });
