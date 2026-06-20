@@ -22,8 +22,13 @@ const allowedOrigins = process.env.CORS_ORIGIN
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow server-to-server (no origin) and listed origins
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // In production the frontend is served by the same Express process,
+    // so same-origin requests arrive with no Origin header (or with the
+    // Render hostname). Allow both cases.
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow any onrender.com subdomain (covers the deployed Render URL)
+    if (origin.endsWith('.onrender.com')) return callback(null, true);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
