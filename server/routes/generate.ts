@@ -240,47 +240,53 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       })
     );
 
-    // ── Run Imagen + FLUX in parallel ──────────────────────────────────────
-    const [geminiSettled, fluxSettled] = await Promise.allSettled([
+    const charSpecs = charData.map(c => ({ name: c.name, visual_dna: c.visual_dna, description: c.description }));
+
+    // ── Run FLUX (primary) + Imagen (secondary, if Gemini key present) in parallel ──
+    const [fluxSettled, geminiSettled] = await Promise.allSettled([
+      generateWithFlux(prompt, stylePrompt, charSpecs),
       runImagenGeneration(ai, charData, stylePrompt, prompt),
-      generateWithFlux(prompt, stylePrompt, charData.map(c => ({
-        name: c.name,
-        visual_dna: c.visual_dna,
-        description: c.description,
-      }))),
     ]);
 
     // Score each successful result
     const candidates: Candidate[] = [];
 
-    if (geminiSettled.status === 'fulfilled') {
-      const { imageData, mimeType } = geminiSettled.value;
-      const score = await checkConsistency(ai, charData, imageData);
-      candidates.push({ imageData, mimeType, model: 'gemini', score });
-    } else {
-      console.error('Gemini generation failed:', geminiSettled.reason?.message);
-    }
-
     if (fluxSettled.status === 'fulfilled' && fluxSettled.value) {
       const { imageData, mimeType } = fluxSettled.value;
       const score = await checkConsistency(ai, charData, imageData);
       candidates.push({ imageData, mimeType, model: 'flux', score });
+    } else {
+      console.error('FLUX generation failed:', (fluxSettled as PromiseRejectedResult).reason?.message ?? 'no TOGETHER_API_KEY');
+    }
+
+    if (geminiSettled.status === 'fulfilled') {
+      const { imageData, mimeType } = geminiSettled.value;
+      const score = await checkConsistency(ai, charData, imageData);
+      candidates.push({ imageData, mimeType, model: 'imagen', score });
+    } else {
+      console.error('Imagen generation failed:', (geminiSettled as PromiseRejectedResult).reason?.message);
     }
 
     if (candidates.length === 0) {
-      throw new Error('All generation models failed. Please try again.');
+      const fluxMissing = !process.env.TOGETHER_API_KEY;
+      throw new Error(fluxMissing
+        ? 'No generation API configured. Add TOGETHER_API_KEY to your environment variables.'
+        : 'All generation models failed. Please try again.'
+      );
     }
 
     // Pick the winner — highest consistency score
     let winner = candidates.reduce((best, c) => c.score > best.score ? c : best, candidates[0]);
 
-    // Auto-retry if winner score < 60 (stronger emphasis pass via retry=true)
-    if (winner.score < 60 && charData.some(c => c.fetchedBase64 || c.visual_dna)) {
+    // Auto-retry with FLUX if winner score < 60
+    if (winner.score < 60 && charData.some(c => c.visual_dna || c.description)) {
       try {
-        const retry = await runImagenGeneration(ai, charData, stylePrompt, prompt, true);
-        const retryScore = await checkConsistency(ai, charData, retry.imageData);
-        if (retryScore > winner.score) {
-          winner = { ...retry, model: 'imagen-retry', score: retryScore };
+        const retry = await generateWithFlux(`[CONSISTENCY RETRY] ${prompt}`, stylePrompt, charSpecs);
+        if (retry) {
+          const retryScore = await checkConsistency(ai, charData, retry.imageData);
+          if (retryScore > winner.score) {
+            winner = { ...retry, model: 'flux-retry', score: retryScore };
+          }
         }
       } catch { /* keep current winner */ }
     }
