@@ -4,6 +4,9 @@ import { supabase } from '../supabase.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { generateRateLimiter } from '../middleware/rateLimiter.js';
 import { generateWithFlux } from '../services/fluxGenerate.js';
+import { generateWithHF } from '../services/hfGenerate.js';
+import { generateWithPollinations } from '../services/pollinationsGenerate.js';
+import { generateWithCloudflare } from '../services/cloudflareGenerate.js';
 
 const router = Router();
 
@@ -242,50 +245,55 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
 
     const charSpecs = charData.map(c => ({ name: c.name, visual_dna: c.visual_dna, description: c.description }));
 
-    // ── Run FLUX (primary) + Imagen (secondary, if Gemini key present) in parallel ──
-    const [fluxSettled, geminiSettled] = await Promise.allSettled([
-      generateWithFlux(prompt, stylePrompt, charSpecs),
+    // ── Run all generators in parallel ────────────────────────────────────
+    const [hfSettled, pollinationsSettled, cfSettled, imagenSettled] = await Promise.allSettled([
+      generateWithHF(prompt, stylePrompt, charSpecs),
+      generateWithPollinations(prompt, stylePrompt, charSpecs),
+      generateWithCloudflare(prompt, stylePrompt, charSpecs),
       runImagenGeneration(ai, charData, stylePrompt, prompt),
     ]);
 
     // Score each successful result
     const candidates: Candidate[] = [];
 
-    if (fluxSettled.status === 'fulfilled' && fluxSettled.value) {
-      const { imageData, mimeType } = fluxSettled.value;
-      const score = await checkConsistency(ai, charData, imageData);
-      candidates.push({ imageData, mimeType, model: 'flux', score });
-    } else {
-      console.error('FLUX generation failed:', (fluxSettled as PromiseRejectedResult).reason?.message ?? 'no TOGETHER_API_KEY');
-    }
+    const results: Array<{ settled: PromiseSettledResult<any>; model: string }> = [
+      { settled: hfSettled,           model: 'huggingface' },
+      { settled: pollinationsSettled, model: 'pollinations' },
+      { settled: cfSettled,           model: 'cloudflare' },
+      { settled: imagenSettled,       model: 'imagen' },
+    ];
 
-    if (geminiSettled.status === 'fulfilled') {
-      const { imageData, mimeType } = geminiSettled.value;
-      const score = await checkConsistency(ai, charData, imageData);
-      candidates.push({ imageData, mimeType, model: 'imagen', score });
-    } else {
-      console.error('Imagen generation failed:', (geminiSettled as PromiseRejectedResult).reason?.message);
-    }
+    await Promise.all(results.map(async ({ settled, model }) => {
+      if (settled.status === 'fulfilled' && settled.value) {
+        const { imageData, mimeType } = settled.value;
+        try {
+          const score = await checkConsistency(ai, charData, imageData);
+          candidates.push({ imageData, mimeType, model, score });
+        } catch {
+          candidates.push({ imageData, mimeType, model, score: 75 });
+        }
+      } else if (settled.status === 'rejected') {
+        console.error(`${model} generation failed:`, settled.reason?.message);
+      }
+    }));
 
     if (candidates.length === 0) {
-      const fluxMissing = !process.env.TOGETHER_API_KEY;
-      throw new Error(fluxMissing
-        ? 'No generation API configured. Add TOGETHER_API_KEY to your environment variables.'
-        : 'All generation models failed. Please try again.'
-      );
+      throw new Error('All generation models failed. Check that HF_API_KEY or CLOUDFLARE credentials are set in environment variables.');
     }
 
     // Pick the winner — highest consistency score
     let winner = candidates.reduce((best, c) => c.score > best.score ? c : best, candidates[0]);
 
-    // Auto-retry with FLUX if winner score < 60
+    // Auto-retry with HF if winner score < 60
     if (winner.score < 60 && charData.some(c => c.visual_dna || c.description)) {
       try {
-        const retry = await generateWithFlux(`[CONSISTENCY RETRY] ${prompt}`, stylePrompt, charSpecs);
+        const retryPrompt = `[CONSISTENCY PRIORITY] ${prompt}`;
+        const retry = await generateWithHF(retryPrompt, stylePrompt, charSpecs)
+          ?? await generateWithPollinations(retryPrompt, stylePrompt, charSpecs);
         if (retry) {
           const retryScore = await checkConsistency(ai, charData, retry.imageData);
           if (retryScore > winner.score) {
-            winner = { ...retry, model: 'flux-retry', score: retryScore };
+            winner = { ...retry, model: 'retry', score: retryScore };
           }
         }
       } catch { /* keep current winner */ }
