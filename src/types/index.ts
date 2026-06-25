@@ -22,6 +22,12 @@ export interface Character {
   mime_type: string;
   visual_dna: string;
   created_at: string;
+  // LoRA fine-tuning fields
+  lora_status: 'none' | 'training' | 'queued' | 'ready' | 'failed';
+  lora_url: string | null;
+  lora_trigger_word: string | null;
+  lora_job_id: string | null;
+  extra_image_urls: string[];
 }
 
 export interface Scene {

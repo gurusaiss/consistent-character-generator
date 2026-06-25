@@ -7,6 +7,7 @@ import { generateWithFlux } from '../services/fluxGenerate.js';
 import { generateWithHF } from '../services/hfGenerate.js';
 import { generateWithPollinations } from '../services/pollinationsGenerate.js';
 import { generateWithCloudflare } from '../services/cloudflareGenerate.js';
+import { generateWithFalPuLID, generateWithFalLoRA } from '../services/falGenerate.js';
 
 const router = Router();
 
@@ -32,6 +33,9 @@ interface CharInput {
   reference_image_url: string;
   mime_type: string;
   visual_dna: string;
+  lora_url?: string;
+  lora_trigger_word?: string;
+  lora_status?: string;
 }
 
 interface CharData extends CharInput {
@@ -281,15 +285,31 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       })
     );
 
-    const charSpecs = charData.map(c => ({ name: c.name, visual_dna: c.visual_dna, description: c.description }));
+    const charSpecs = charData.map(c => ({
+      name: c.name,
+      visual_dna: c.visual_dna,
+      description: c.description,
+      reference_image_url: c.reference_image_url,
+      lora_url: c.lora_url,
+      lora_trigger_word: c.lora_trigger_word,
+      lora_status: c.lora_status,
+    }));
+
+    // If any character has a ready LoRA, use it for a dedicated high-quality generation
+    const loraChar = charData.find(c => c.lora_status === 'ready' && c.lora_url && c.lora_trigger_word);
+    const loraGenPromise = loraChar
+      ? generateWithFalLoRA(loraChar.lora_url!, loraChar.lora_trigger_word!, prompt, stylePrompt, charSpecs)
+      : Promise.resolve(null);
 
     // ── Run all generators in parallel ────────────────────────────────────
-    const [hfSettled, pollinationsSettled, cfSettled, imagenSettled, togetherSettled] = await Promise.allSettled([
+    const [hfSettled, pollinationsSettled, cfSettled, imagenSettled, togetherSettled, falPulidSettled, falLoraSettled] = await Promise.allSettled([
       generateWithHF(prompt, stylePrompt, charSpecs),
       generateWithPollinations(prompt, stylePrompt, charSpecs),
       generateWithCloudflare(prompt, stylePrompt, charSpecs),
       runImagenGeneration(ai, charData, stylePrompt, prompt),
       generateWithFlux(prompt, stylePrompt, charSpecs),
+      generateWithFalPuLID(prompt, stylePrompt, charSpecs),  // face-conditioning (no training needed)
+      loraGenPromise,                                         // trained LoRA (best consistency, if ready)
     ]);
 
     // Score each successful result
@@ -301,6 +321,8 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       { settled: cfSettled,           model: 'cloudflare' },
       { settled: imagenSettled,       model: 'imagen' },
       { settled: togetherSettled,     model: 'together' },
+      { settled: falPulidSettled,     model: 'fal-pulid' },
+      { settled: falLoraSettled,      model: 'fal-lora' },
     ];
 
     await Promise.all(results.map(async ({ settled, model }) => {

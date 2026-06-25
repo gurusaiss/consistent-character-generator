@@ -67,6 +67,17 @@ export const api = {
     ): Promise<Character> => put(`/api/characters/${id}`, data),
 
     delete: (id: string): Promise<{ success: boolean }> => del(`/api/characters/${id}`),
+
+    trainLoRA: (id: string): Promise<{ success: boolean; jobId: string; triggerWord: string; message: string }> =>
+      post(`/api/characters/${id}/train`, {}),
+
+    loraStatus: (id: string): Promise<{
+      lora_status: string;
+      lora_url?: string;
+      lora_trigger_word?: string;
+      imageCount: number;
+      error?: string;
+    }> => get(`/api/characters/${id}/lora-status`),
   },
 
   scenes: {

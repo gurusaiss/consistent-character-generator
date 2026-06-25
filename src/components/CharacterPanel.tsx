@@ -1,15 +1,84 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import type { Character } from '../types';
+import { api } from '../services/api';
 
 interface Props {
   characters: Character[];
   onAdd: () => void;
   onEdit: (character: Character) => void;
   onDelete: (character: Character) => void;
+  onCharacterUpdated?: (updated: Character) => void;
 }
 
-export default function CharacterPanel({ characters, onAdd, onEdit, onDelete }: Props) {
+function LoRAStatusBadge({ status }: { status: Character['lora_status'] }) {
+  if (!status || status === 'none') return null;
+  const map = {
+    training: { label: 'Training…', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/25' },
+    queued:   { label: 'Queued',    cls: 'bg-amber-500/15 text-amber-400 border-amber-500/25' },
+    ready:    { label: '✦ LoRA',    cls: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' },
+    failed:   { label: 'Failed',    cls: 'bg-red-500/15 text-red-400 border-red-500/25' },
+  } as const;
+  const m = map[status];
+  if (!m) return null;
+  return (
+    <span className={`shrink-0 text-[9px] border px-1.5 py-0.5 rounded-full ${m.cls}`}>
+      {m.label}
+    </span>
+  );
+}
+
+export default function CharacterPanel({ characters, onAdd, onEdit, onDelete, onCharacterUpdated }: Props) {
   const [dnaChar, setDnaChar] = useState<Character | null>(null);
+  const [trainingIds, setTrainingIds] = useState<Set<string>>(new Set());
+
+  // Poll training status for any character currently training
+  const pollTraining = useCallback(async () => {
+    const training = characters.filter(c => c.lora_status === 'training' || c.lora_status === 'queued');
+    for (const char of training) {
+      try {
+        const status = await api.characters.loraStatus(char.id);
+        if ((status.lora_status === 'ready' || status.lora_status === 'failed') && onCharacterUpdated) {
+          // Refresh the character data by re-fetching
+          const updated = { ...char, lora_status: status.lora_status as Character['lora_status'], lora_url: status.lora_url || null };
+          onCharacterUpdated(updated);
+          if (status.lora_status === 'ready') {
+            toast.success(`LoRA trained for ${char.name}! Face consistency is now at maximum.`);
+          } else {
+            toast.error(`LoRA training failed for ${char.name}.`);
+          }
+        }
+      } catch { /* silent */ }
+    }
+  }, [characters, onCharacterUpdated]);
+
+  useEffect(() => {
+    const hasTraining = characters.some(c => c.lora_status === 'training' || c.lora_status === 'queued');
+    if (!hasTraining) return;
+    const interval = setInterval(pollTraining, 15000); // poll every 15s
+    return () => clearInterval(interval);
+  }, [characters, pollTraining]);
+
+  async function handleTrainLoRA(char: Character) {
+    const imageCount = [char.reference_image_url, ...(char.extra_image_urls || [])].filter(Boolean).length;
+    if (imageCount < 3) {
+      toast.error(`Need at least 3 reference images to train. ${char.name} has ${imageCount}. Edit the character to add more.`);
+      return;
+    }
+
+    setTrainingIds(prev => new Set(prev).add(char.id));
+    try {
+      const result = await api.characters.trainLoRA(char.id);
+      toast.success(`Training started for ${char.name}! ${result.message}`);
+      if (onCharacterUpdated) {
+        onCharacterUpdated({ ...char, lora_status: 'training' });
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start training');
+    } finally {
+      setTrainingIds(prev => { const s = new Set(prev); s.delete(char.id); return s; });
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -30,52 +99,102 @@ export default function CharacterPanel({ characters, onAdd, onEdit, onDelete }: 
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-          {characters.map((char) => (
-            <div key={char.id} className="glass-card p-3 group">
-              <div className="flex items-start gap-3">
-                <div className="shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-white/10">
-                  {char.reference_image_url ? (
-                    <img src={char.reference_image_url} alt={char.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-violet-600/30 to-cyan-600/20 flex items-center justify-center">
-                      <span className="text-lg font-bold text-violet-400">{char.name.charAt(0).toUpperCase()}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="font-medium text-slate-200 text-sm truncate">{char.name}</p>
-                    {char.visual_dna && (
-                      <button
-                        onClick={() => setDnaChar(char)}
-                        title="View extracted Visual DNA"
-                        className="shrink-0 text-[9px] bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 px-1.5 py-0.5 rounded-full hover:bg-cyan-500/25 transition-colors"
-                      >
-                        🧬 DNA
-                      </button>
+          {characters.map((char) => {
+            const imageCount = [char.reference_image_url, ...(char.extra_image_urls || [])].filter(Boolean).length;
+            const canTrain = imageCount >= 3 && char.lora_status !== 'training' && char.lora_status !== 'queued';
+            const isTraining = trainingIds.has(char.id) || char.lora_status === 'training' || char.lora_status === 'queued';
+
+            return (
+              <div key={char.id} className="glass-card p-3 group">
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0 w-12 h-12 rounded-xl overflow-hidden border border-white/10 relative">
+                    {char.reference_image_url ? (
+                      <img src={char.reference_image_url} alt={char.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-violet-600/30 to-cyan-600/20 flex items-center justify-center">
+                        <span className="text-lg font-bold text-violet-400">{char.name.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
+                    {char.lora_status === 'ready' && (
+                      <div className="absolute inset-0 rounded-xl ring-2 ring-emerald-400/60" title="LoRA trained — maximum face consistency" />
                     )}
                   </div>
-                  {char.description && (
-                    <p className="text-slate-500 text-xs mt-0.5 line-clamp-2">{char.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="font-medium text-slate-200 text-sm truncate">{char.name}</p>
+                      {char.visual_dna && (
+                        <button
+                          onClick={() => setDnaChar(char)}
+                          title="View extracted Visual DNA"
+                          className="shrink-0 text-[9px] bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 px-1.5 py-0.5 rounded-full hover:bg-cyan-500/25 transition-colors"
+                        >
+                          🧬 DNA
+                        </button>
+                      )}
+                      <LoRAStatusBadge status={char.lora_status} />
+                    </div>
+                    {char.description && (
+                      <p className="text-slate-500 text-xs mt-0.5 line-clamp-2">{char.description}</p>
+                    )}
+                    <p className="text-slate-600 text-[10px] mt-0.5">
+                      {imageCount} image{imageCount !== 1 ? 's' : ''}
+                      {imageCount < 3 && ' · add more to enable LoRA'}
+                      {char.lora_status === 'ready' && ' · LoRA active'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => onEdit(char)}
+                    className="flex-1 text-xs py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors border border-white/5"
+                  >
+                    Edit
+                  </button>
+
+                  {/* Train LoRA button */}
+                  {char.lora_status !== 'ready' && (
+                    <button
+                      onClick={() => handleTrainLoRA(char)}
+                      disabled={isTraining || !canTrain}
+                      title={
+                        isTraining ? 'Training in progress…' :
+                        !canTrain && imageCount < 3 ? `Need ${3 - imageCount} more image(s) to train` :
+                        'Train a LoRA model for maximum face consistency'
+                      }
+                      className={`flex-1 text-xs py-1 rounded-lg border transition-colors ${
+                        isTraining
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 cursor-wait'
+                          : canTrain
+                            ? 'bg-violet-600/15 hover:bg-violet-600/25 text-violet-400 hover:text-violet-300 border-violet-500/20'
+                            : 'bg-white/5 text-slate-600 border-white/5 cursor-not-allowed'
+                      }`}
+                    >
+                      {isTraining ? 'Training…' : `Train LoRA${imageCount < 3 ? ` (${imageCount}/3)` : ''}`}
+                    </button>
                   )}
+
+                  {char.lora_status === 'ready' && (
+                    <button
+                      onClick={() => handleTrainLoRA(char)}
+                      disabled={isTraining}
+                      title="Re-train LoRA with updated images"
+                      className="flex-1 text-xs py-1 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 transition-colors"
+                    >
+                      Re-train
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => onDelete(char)}
+                    className="flex-1 text-xs py-1 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-400 transition-colors border border-red-500/20"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2 mt-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => onEdit(char)}
-                  className="flex-1 text-xs py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors border border-white/5"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => onDelete(char)}
-                  className="flex-1 text-xs py-1 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-400 transition-colors border border-red-500/20"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -109,9 +228,16 @@ export default function CharacterPanel({ characters, onAdd, onEdit, onDelete }: 
                   <div className="bg-black/30 rounded-xl p-4 border border-white/5 max-h-64 overflow-y-auto">
                     <p className="text-slate-300 text-sm leading-relaxed font-mono whitespace-pre-wrap">{dnaChar.visual_dna}</p>
                   </div>
-                  <p className="text-xs text-slate-600 mt-3">
-                    This DNA is used by both Gemini and FLUX to maintain character consistency across all scenes.
-                  </p>
+                  {dnaChar.lora_status === 'ready' && (
+                    <div className="mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                      <p className="text-xs text-emerald-400">
+                        ✦ LoRA trained — trigger word: <code className="font-mono">{dnaChar.lora_trigger_word}</code>
+                      </p>
+                      <p className="text-xs text-emerald-400/70 mt-0.5">
+                        This character's face is fine-tuned into the model for maximum consistency.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-6">
