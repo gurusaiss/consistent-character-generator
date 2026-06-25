@@ -117,12 +117,50 @@ function buildTextPrompt(chars: CharData[], stylePrompt: string, scenePrompt: st
 }
 
 async function runImagenGeneration(ai: GoogleGenAI, chars: CharData[], stylePrompt: string, scenePrompt: string, retry = false): Promise<{ imageData: string; mimeType: string }> {
-  const prompt = buildTextPrompt(chars, stylePrompt, scenePrompt, retry);
+  const charsWithImages = chars.filter(c => c.fetchedBase64);
+
+  // Build a detailed prompt that explicitly names all character physical attributes
+  const charDescriptions = chars.map(c => {
+    const spec = c.visual_dna || c.description;
+    return spec ? `${c.name}: ${spec}` : c.name;
+  }).join('; ');
+
+  const prompt = [
+    charDescriptions,
+    stylePrompt,
+    retry ? `[CHARACTER CONSISTENCY PRIORITY] ${scenePrompt}` : scenePrompt,
+    'masterpiece quality, highly detailed faces, sharp focus, photorealistic skin, cinematic lighting, single panel, no text, no watermarks, no borders',
+  ].filter(Boolean).join('. ');
+
+  // Build referenceImages array — Imagen 3 supports SUBJECT reference conditioning
+  // This actually uses the face/person reference to guide generation
+  const referenceImages = charsWithImages.map((c, i) => ({
+    referenceType: 'REFERENCE_TYPE_PERSON',
+    referenceId: i + 1,
+    referenceImage: {
+      bytesBase64Encoded: c.fetchedBase64,
+      mimeType: c.mime_type || 'image/jpeg',
+    },
+    personImageConfig: {
+      personDescription: c.visual_dna || c.description || c.name,
+    },
+  }));
+
+  const config: Record<string, any> = {
+    numberOfImages: 1,
+    outputMimeType: 'image/jpeg',
+    personGeneration: 'allow_adult',
+  };
+
+  // Only attach referenceImages when we have them — falls back to text-only otherwise
+  if (referenceImages.length > 0) {
+    config.referenceImages = referenceImages;
+  }
 
   const response = await (ai.models as any).generateImages({
     model: 'imagen-3.0-generate-002',
     prompt,
-    config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
+    config,
   });
 
   const imageBytes = response?.generatedImages?.[0]?.image?.imageBytes;
@@ -246,11 +284,12 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     const charSpecs = charData.map(c => ({ name: c.name, visual_dna: c.visual_dna, description: c.description }));
 
     // ── Run all generators in parallel ────────────────────────────────────
-    const [hfSettled, pollinationsSettled, cfSettled, imagenSettled] = await Promise.allSettled([
+    const [hfSettled, pollinationsSettled, cfSettled, imagenSettled, togetherSettled] = await Promise.allSettled([
       generateWithHF(prompt, stylePrompt, charSpecs),
       generateWithPollinations(prompt, stylePrompt, charSpecs),
       generateWithCloudflare(prompt, stylePrompt, charSpecs),
       runImagenGeneration(ai, charData, stylePrompt, prompt),
+      generateWithFlux(prompt, stylePrompt, charSpecs),
     ]);
 
     // Score each successful result
@@ -261,6 +300,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       { settled: pollinationsSettled, model: 'pollinations' },
       { settled: cfSettled,           model: 'cloudflare' },
       { settled: imagenSettled,       model: 'imagen' },
+      { settled: togetherSettled,     model: 'together' },
     ];
 
     await Promise.all(results.map(async ({ settled, model }) => {

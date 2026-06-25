@@ -20,39 +20,59 @@ export async function generateWithCloudflare(
 
   const charBlock = chars
     .filter(c => c.visual_dna || c.description)
-    .map(c => `${c.name}: ${c.visual_dna || c.description}`)
-    .join('. ');
+    .map(c => `${c.name} (${c.visual_dna || c.description})`)
+    .join(', ');
 
   const fullPrompt = [
-    charBlock,
-    `Art direction: ${stylePrompt}`,
-    `Scene: ${prompt}`,
-    'Single storyboard panel, no text, no watermarks, cinematic framing, ultra high quality',
-  ].filter(Boolean).join('. ');
+    charBlock ? `Characters: ${charBlock}` : '',
+    stylePrompt,
+    prompt,
+    'masterpiece, best quality, highly detailed, sharp focus, 8k, cinematic, no text, no watermarks',
+  ].filter(Boolean).join(', ');
 
-  try {
-    const res = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ prompt: fullPrompt }),
+  const negativePrompt = 'deformed, ugly, bad anatomy, blurry, low quality, text, watermark, disfigured';
+
+  // Try models in order of quality for face/character fidelity
+  const models = [
+    '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+    '@cf/lykon/dreamshaper-8-lcm',
+    '@cf/black-forest-labs/flux-1-schnell',
+  ];
+
+  for (const model of models) {
+    try {
+      const body: Record<string, any> = { prompt: fullPrompt };
+      if (model.includes('stable-diffusion') || model.includes('dreamshaper')) {
+        body.negative_prompt = negativePrompt;
+        body.num_steps = 20;
+        body.width = 1024;
+        body.height = 576;
       }
-    );
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      console.warn(`Cloudflare AI error ${res.status}:`, body.slice(0, 200));
-      return null;
+      const res = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        console.warn(`Cloudflare AI error ${res.status} (${model}):`, errBody.slice(0, 200));
+        continue;
+      }
+
+      const buffer = await res.arrayBuffer();
+      return { imageData: Buffer.from(buffer).toString('base64'), mimeType: 'image/jpeg' };
+    } catch (err) {
+      console.warn(`Cloudflare ${model} error:`, err instanceof Error ? err.message : err);
     }
-
-    const buffer = await res.arrayBuffer();
-    return { imageData: Buffer.from(buffer).toString('base64'), mimeType: 'image/jpeg' };
-  } catch (err) {
-    console.warn('Cloudflare generation error:', err instanceof Error ? err.message : err);
-    return null;
   }
+
+  return null;
 }

@@ -16,21 +16,23 @@ export async function generateWithPollinations(
 ): Promise<PollinationsResult | null> {
   const charBlock = chars
     .filter(c => c.visual_dna || c.description)
-    .map(c => `${c.name}: ${c.visual_dna || c.description}`)
-    .join('. ');
+    .map(c => `${c.name} (${c.visual_dna || c.description})`)
+    .join(', ');
 
+  // flux-realism produces significantly more photorealistic results than base flux
   const fullPrompt = [
-    charBlock,
-    `Art direction: ${stylePrompt}`,
-    `Scene: ${prompt}`,
-    'Single storyboard panel, no text, no watermarks, cinematic framing, ultra high quality',
-  ].filter(Boolean).join('. ');
+    charBlock ? `Characters: ${charBlock}` : '',
+    stylePrompt,
+    prompt,
+    'masterpiece, best quality, highly detailed faces, sharp focus, photorealistic, 8k, cinematic, no text, no watermarks',
+  ].filter(Boolean).join(', ');
 
   try {
     const encoded = encodeURIComponent(fullPrompt);
-    const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=576&model=flux&nologo=true&nofeed=true`;
+    // Use flux-realism for higher quality photorealistic output
+    const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=576&model=flux-realism&nologo=true&nofeed=true&enhance=true`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(55000) });
     if (!res.ok) {
       console.warn(`Pollinations error ${res.status}`);
       return null;
