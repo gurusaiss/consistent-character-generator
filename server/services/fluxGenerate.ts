@@ -74,7 +74,7 @@ export async function generateWithFlux(
         console.warn(`Together AI fallback error ${fallback.status}:`, body.slice(0, 200));
         return null;
       }
-      const fallbackData = await fallback.json();
+      const fallbackData: any = await fallback.json();
       const url: string | undefined = fallbackData.data?.[0]?.url;
       if (!url) return null;
       const imgRes = await fetch(url);
@@ -83,7 +83,7 @@ export async function generateWithFlux(
       return { imageData: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' };
     }
 
-    const data = await res.json();
+    const data: any = await res.json();
     const imageUrl: string | undefined = data.data?.[0]?.url;
     if (!imageUrl) {
       const b64: string | undefined = data.data?.[0]?.b64_json;

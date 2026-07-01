@@ -244,7 +244,7 @@ router.post('/characters/:id/train', requireAuth, async (req, res) => {
   const triggerWord = `${char.name.replace(/[^a-zA-Z0-9]/g, '')}lora`.toUpperCase().slice(0, 20);
 
   try {
-    const jobId = await startLoRATraining(req.params.id, imageUrls, triggerWord);
+    const jobId = await startLoRATraining(String(req.params.id), imageUrls, triggerWord);
 
     await supabase.from('characters').update({
       lora_status: 'training',

@@ -77,7 +77,7 @@ export async function generateWithFalPuLID(
       return null;
     }
 
-    const data = await res.json();
+    const data: any = await res.json();
     const imageUrl: string | undefined = data.images?.[0]?.url;
     if (!imageUrl) return null;
 
@@ -143,7 +143,7 @@ export async function generateWithFalLoRA(
       return null;
     }
 
-    const data = await res.json();
+    const data: any = await res.json();
     const imageUrl: string | undefined = data.images?.[0]?.url;
     if (!imageUrl) return null;
 

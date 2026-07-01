@@ -100,7 +100,7 @@ export async function startLoRATraining(
     throw new Error(`fal.ai training submission failed (${res.status}): ${body.slice(0, 300)}`);
   }
 
-  const data = await res.json();
+  const data: any = await res.json();
   const requestId: string = data.request_id;
   if (!requestId) throw new Error('fal.ai did not return a request_id');
   return requestId;
@@ -124,7 +124,7 @@ export async function getTrainingStatus(jobId: string): Promise<TrainingStatus> 
       return { status: 'FAILED', error: `Status check failed: ${statusRes.status}` };
     }
 
-    const statusData = await statusRes.json();
+    const statusData: any = await statusRes.json();
     const status = statusData.status as TrainingStatus['status'];
 
     if (status !== 'COMPLETED') {
@@ -141,7 +141,7 @@ export async function getTrainingStatus(jobId: string): Promise<TrainingStatus> 
       return { status: 'FAILED', error: `Result fetch failed: ${resultRes.status}` };
     }
 
-    const result = await resultRes.json();
+    const result: any = await resultRes.json();
     const loraUrl: string | undefined = result.diffusers_lora_file?.url;
 
     if (!loraUrl) {

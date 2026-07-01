@@ -8,6 +8,8 @@ import { generateWithHF } from '../services/hfGenerate.js';
 import { generateWithPollinations } from '../services/pollinationsGenerate.js';
 import { generateWithCloudflare } from '../services/cloudflareGenerate.js';
 import { generateWithFalPuLID, generateWithFalLoRA } from '../services/falGenerate.js';
+import { enhanceScenePrompt } from '../services/promptEnhance.js';
+import { upscaleImage } from '../services/upscaleService.js';
 
 const router = Router();
 
@@ -201,6 +203,32 @@ async function scoreConsistencyOnce(
 }
 
 /**
+ * Aesthetic quality scoring — rates sharpness, anatomy, composition, artifacts.
+ * Prevents a blurry-but-consistent image from beating a sharp one.
+ */
+async function scoreQuality(ai: GoogleGenAI, generatedBase64: string): Promise<number> {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{
+        parts: [
+          { inlineData: { mimeType: 'image/png', data: generatedBase64 } },
+          {
+            text: `Rate this AI-generated storyboard image's technical quality 0-100:\n- Sharpness and detail (blurry/muddy = low)\n- Anatomy correctness (deformed hands/faces/limbs = very low)\n- Composition and lighting\n- Absence of artifacts, text, watermarks, borders\n\n90-100 = flawless professional quality\n70-89 = good, minor flaws\n50-69 = noticeable issues\n<50 = deformed, blurry, or artifact-heavy\n\nRespond with ONLY the integer.`,
+          },
+        ],
+      }],
+    });
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    const match = text.match(/\d+/)?.[0];
+    if (!match) return 75;
+    return Math.min(100, Math.max(0, parseInt(match)));
+  } catch {
+    return 75;
+  }
+}
+
+/**
  * Median-of-3 consistency scoring. A single LLM vote is noisy and can pick the
  * wrong model or wrongly skip the retry. Three parallel votes + median gives a
  * far more reliable score for winner selection. Falls back gracefully if votes fail.
@@ -295,21 +323,24 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       lora_status: c.lora_status,
     }));
 
+    // Enhance the raw scene prompt with cinematic detail (lighting, lens, composition)
+    const enhancedPrompt = await enhanceScenePrompt(ai, prompt, stylePrompt);
+
     // If any character has a ready LoRA, use it for a dedicated high-quality generation
     const loraChar = charData.find(c => c.lora_status === 'ready' && c.lora_url && c.lora_trigger_word);
     const loraGenPromise = loraChar
-      ? generateWithFalLoRA(loraChar.lora_url!, loraChar.lora_trigger_word!, prompt, stylePrompt, charSpecs)
+      ? generateWithFalLoRA(loraChar.lora_url!, loraChar.lora_trigger_word!, enhancedPrompt, stylePrompt, charSpecs)
       : Promise.resolve(null);
 
     // ── Run all generators in parallel ────────────────────────────────────
     const [hfSettled, pollinationsSettled, cfSettled, imagenSettled, togetherSettled, falPulidSettled, falLoraSettled] = await Promise.allSettled([
-      generateWithHF(prompt, stylePrompt, charSpecs),
-      generateWithPollinations(prompt, stylePrompt, charSpecs),
-      generateWithCloudflare(prompt, stylePrompt, charSpecs),
-      runImagenGeneration(ai, charData, stylePrompt, prompt),
-      generateWithFlux(prompt, stylePrompt, charSpecs),
-      generateWithFalPuLID(prompt, stylePrompt, charSpecs),  // face-conditioning (no training needed)
-      loraGenPromise,                                         // trained LoRA (best consistency, if ready)
+      generateWithHF(enhancedPrompt, stylePrompt, charSpecs),
+      generateWithPollinations(enhancedPrompt, stylePrompt, charSpecs),
+      generateWithCloudflare(enhancedPrompt, stylePrompt, charSpecs),
+      runImagenGeneration(ai, charData, stylePrompt, enhancedPrompt),
+      generateWithFlux(enhancedPrompt, stylePrompt, charSpecs),
+      generateWithFalPuLID(enhancedPrompt, stylePrompt, charSpecs), // face-conditioning (no training needed)
+      loraGenPromise,                                               // trained LoRA (best consistency, if ready)
     ]);
 
     // Score each successful result
@@ -329,7 +360,12 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       if (settled.status === 'fulfilled' && settled.value) {
         const { imageData, mimeType } = settled.value;
         try {
-          const score = await checkConsistency(ai, charData, imageData);
+          // Combined score: consistency dominates, quality breaks ties and kills deformed images
+          const [consistency, quality] = await Promise.all([
+            checkConsistency(ai, charData, imageData),
+            scoreQuality(ai, imageData),
+          ]);
+          const score = Math.round(consistency * 0.65 + quality * 0.35);
           candidates.push({ imageData, mimeType, model, score });
         } catch {
           candidates.push({ imageData, mimeType, model, score: 75 });
@@ -349,7 +385,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     // Auto-retry with HF if winner score < 60
     if (winner.score < 60 && charData.some(c => c.visual_dna || c.description)) {
       try {
-        const retryPrompt = `[CONSISTENCY PRIORITY] ${prompt}`;
+        const retryPrompt = `[CONSISTENCY PRIORITY] ${enhancedPrompt}`;
         const retry = await generateWithHF(retryPrompt, stylePrompt, charSpecs)
           ?? await generateWithPollinations(retryPrompt, stylePrompt, charSpecs);
         if (retry) {
@@ -361,7 +397,15 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       } catch { /* keep current winner */ }
     }
 
-    const { imageData, mimeType, model: modelUsed, score: consistencyScore } = winner;
+    let { imageData, mimeType } = winner;
+    const { model: modelUsed, score: consistencyScore } = winner;
+
+    // Upscale + face-enhance the winner (2x ESRGAN with GFPGAN) — falls back to original
+    const upscaled = await upscaleImage(imageData, mimeType);
+    if (upscaled) {
+      imageData = upscaled.imageData;
+      mimeType = upscaled.mimeType;
+    }
 
     // Upload winner to Storage
     const imagePath = `scenes/${sceneId || Date.now()}.png`;
