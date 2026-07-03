@@ -86,12 +86,11 @@ export async function startLoRATraining(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
+      // Only documented params — rank/learning_rate are not part of this API
       images_data_url: zipUrl,
       trigger_word: triggerWord,
-      steps: 500,         // ~3-5 min, good quality
-      rank: 16,           // LoRA rank — 16 is a good balance
-      learning_rate: 0.0004,
-      multiresolution_training: true,
+      steps: 500,          // ~3-5 min, good quality
+      create_masks: true,  // segmentation masks improve subject-focused training
     }),
   });
 

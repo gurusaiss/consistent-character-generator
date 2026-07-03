@@ -29,8 +29,9 @@ export async function generateWithPollinations(
 
   try {
     const encoded = encodeURIComponent(fullPrompt);
-    // Use flux-realism for higher quality photorealistic output
-    const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=576&model=flux-realism&nologo=true&nofeed=true&enhance=true`;
+    // No model param — Pollinations' available models change over time
+    // (currently only "sana"); omitting it always uses their current default
+    const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=576&nologo=true&nofeed=true&enhance=true`;
 
     const res = await fetch(url, { signal: AbortSignal.timeout(55000) });
     if (!res.ok) {

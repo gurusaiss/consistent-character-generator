@@ -18,13 +18,6 @@ interface CharSpec {
   reference_image_url?: string;
 }
 
-async function fetchImageAsBase64(url: string): Promise<string> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`Failed to fetch: ${url}`);
-  const buf = await res.arrayBuffer();
-  return Buffer.from(buf).toString('base64');
-}
-
 export async function generateWithFalPuLID(
   prompt: string,
   stylePrompt: string,
@@ -33,7 +26,10 @@ export async function generateWithFalPuLID(
   const falKey = process.env.FAL_KEY;
   if (!falKey) return null;
 
-  const charsWithImages = chars.filter(c => c.reference_image_url);
+  // PuLID requires exactly one reference face image (reference_image_url is a
+  // required single string in the API) — use the first character that has one
+  const refChar = chars.find(c => c.reference_image_url);
+  if (!refChar) return null;
 
   const charBlock = chars
     .filter(c => c.visual_dna || c.description)
@@ -49,16 +45,13 @@ export async function generateWithFalPuLID(
 
   const body: Record<string, any> = {
     prompt: fullPrompt,
+    reference_image_url: refChar.reference_image_url,
     image_size: 'landscape_16_9',
     num_inference_steps: 20,
     guidance_scale: 4.0,
-    num_images: 1,
+    id_weight: 1,
+    negative_prompt: 'deformed, ugly, bad anatomy, blurry, low quality, text, watermark, disfigured face',
   };
-
-  // Attach reference face images for identity conditioning
-  if (charsWithImages.length > 0) {
-    body.reference_images = charsWithImages.map(c => ({ image_url: c.reference_image_url }));
-  }
 
   try {
     const res = await fetch('https://fal.run/fal-ai/flux-pulid', {
