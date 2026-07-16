@@ -40,6 +40,7 @@ export interface Scene {
   error_message: string;
   consistency_score: number | null;
   model_used: string | null;
+  enhanced_prompt: string | null;
   created_at: string;
 }
 
@@ -63,6 +64,7 @@ export interface GenerateResponse {
   modelUsed?: string | null;
   modelsContested?: number;
   creditsRemaining?: number;
+  enhancedPrompt?: string | null;
 }
 
 export const STYLE_PRESETS = [

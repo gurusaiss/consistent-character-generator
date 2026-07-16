@@ -10,6 +10,7 @@ import { generateWithCloudflare } from '../services/cloudflareGenerate.js';
 import { generateWithFalPuLID, generateWithFalLoRA } from '../services/falGenerate.js';
 import { enhanceScenePrompt } from '../services/promptEnhance.js';
 import { upscaleImage } from '../services/upscaleService.js';
+import { applyFaceSwaps } from '../services/faceSwapService.js';
 
 const router = Router();
 
@@ -323,8 +324,9 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       lora_status: c.lora_status,
     }));
 
-    // Enhance the raw scene prompt with cinematic detail (lighting, lens, composition)
-    const enhancedPrompt = await enhanceScenePrompt(ai, prompt, stylePrompt);
+    // Enhance the raw scene prompt — adds lighting, lens, composition, face clarity
+    const characterNames = charData.map(c => c.name).filter(Boolean);
+    const enhancedPrompt = await enhanceScenePrompt(ai, prompt, stylePrompt, characterNames);
 
     // If any character has a ready LoRA, use it for a dedicated high-quality generation
     const loraChar = charData.find(c => c.lora_status === 'ready' && c.lora_url && c.lora_trigger_word);
@@ -400,28 +402,47 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     let { imageData, mimeType } = winner;
     const { model: modelUsed, score: consistencyScore } = winner;
 
-    // Upscale + face-enhance the winner (2x ESRGAN with GFPGAN) — falls back to original
+    // ── Step 1: Upload winner so we have a stable URL for face swap ──────
+    const imagePath = `scenes/${sceneId || Date.now()}.png`;
+    const { error: uploadErr } = await supabase.storage
+      .from('generated-scenes')
+      .upload(imagePath, Buffer.from(imageData, 'base64'), { contentType: mimeType, upsert: true });
+    if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
+
+    const { data: { publicUrl } } = supabase.storage.from('generated-scenes').getPublicUrl(imagePath);
+
+    // ── Step 2: Face swap — replace each character's face with their exact reference photo ──
+    const charsWithRefs = charData.filter(c => c.reference_image_url).map(c => ({
+      name: c.name,
+      reference_image_url: c.reference_image_url,
+    }));
+
+    if (charsWithRefs.length > 0) {
+      try {
+        const swapped = await applyFaceSwaps(publicUrl, charsWithRefs);
+        if (swapped) {
+          imageData = swapped.imageData;
+          mimeType = swapped.mimeType;
+        }
+      } catch (err) {
+        console.warn('Face swap step failed (keeping original):', err instanceof Error ? err.message : err);
+      }
+    }
+
+    // ── Step 3: Upscale + GFPGAN face enhancement ────────────────────────
     const upscaled = await upscaleImage(imageData, mimeType);
     if (upscaled) {
       imageData = upscaled.imageData;
       mimeType = upscaled.mimeType;
     }
 
-    // Upload winner to Storage
-    const imagePath = `scenes/${sceneId || Date.now()}.png`;
-    const imageBuffer = Buffer.from(imageData, 'base64');
-
-    const { error: uploadErr } = await supabase.storage
+    // ── Step 4: Re-upload final (face-swapped + upscaled) ────────────────
+    const { error: finalUploadErr } = await supabase.storage
       .from('generated-scenes')
-      .upload(imagePath, imageBuffer, { contentType: mimeType, upsert: true });
+      .upload(imagePath, Buffer.from(imageData, 'base64'), { contentType: mimeType, upsert: true });
+    if (finalUploadErr) console.warn('Final re-upload failed:', finalUploadErr.message);
 
-    if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('generated-scenes')
-      .getPublicUrl(imagePath);
-
-    // Persist scene + consistency + model
+    // Persist scene + consistency + model + enhanced prompt
     if (sceneId) {
       const { error: sceneUpdateErr } = await supabase.from('scenes').update({
         status: 'success',
@@ -429,6 +450,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
         error_message: '',
         consistency_score: consistencyScore,
         model_used: modelUsed,
+        enhanced_prompt: enhancedPrompt !== prompt ? enhancedPrompt : null,
       }).eq('id', sceneId);
       if (sceneUpdateErr) console.error('Scene update failed:', sceneUpdateErr.message);
     }
@@ -447,6 +469,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     const modelsContested = candidates.length;
     res.json({
       imageUrl: publicUrl,
+      enhancedPrompt: enhancedPrompt !== prompt ? enhancedPrompt : null,
       success: true,
       consistencyScore,
       modelUsed,

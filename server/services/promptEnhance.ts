@@ -1,8 +1,8 @@
 /**
  * Gemini-powered prompt enhancement.
- * Rewrites a raw scene prompt into a rich, cinematic image-generation prompt
- * with explicit lighting, lens, composition, and mood direction.
- * Falls back to the original prompt on any failure.
+ * Rewrites a raw user prompt into a precise, image-generation-optimized prompt.
+ * Prioritises face clarity, character placement, and cinematic quality.
+ * Falls back to original prompt on any failure.
  */
 
 import { GoogleGenAI } from '@google/genai';
@@ -11,27 +11,35 @@ export async function enhanceScenePrompt(
   ai: GoogleGenAI,
   scenePrompt: string,
   stylePrompt: string,
+  characterNames: string[] = [],
 ): Promise<string> {
   try {
+    const charContext = characterNames.length > 0
+      ? `Characters in this scene: ${characterNames.join(', ')}. `
+      : '';
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash',
       contents: [{
         parts: [{
-          text: `You are a world-class cinematographer and prompt engineer for AI image generation.
+          text: `You are a world-class cinematographer and AI image prompt engineer.
 
-Rewrite this scene description into a single dense image-generation prompt. Add specific, concrete detail for:
-- LIGHTING: source, direction, color temperature, mood (e.g. "golden hour rim lighting from camera left")
-- CAMERA: shot type, lens, angle (e.g. "medium close-up, 85mm lens, shallow depth of field")
-- COMPOSITION: framing, subject placement, background treatment
-- ATMOSPHERE: weather, particles, color grade
+${charContext}Rewrite this scene into a single dense, precise image-generation prompt that maximises output quality and character accuracy.
 
-STYLE TO MATCH: ${stylePrompt}
+REQUIRED additions:
+- LIGHTING: type, direction, color temperature — must illuminate faces clearly (no harsh shadows on faces)
+- CAMERA: shot type (e.g. medium shot, close-up), lens (50mm/85mm), angle
+- COMPOSITION: where each character is placed (left/center/right), eye-level or above/below
+- FACE CLARITY: faces must be fully visible, front-facing or 3/4 view — never obscured by hair, shadows, hats, or angle
+- ATMOSPHERE: environment detail, time of day, mood, color grade
+- STYLE: ${stylePrompt}
 
-RULES:
-- Keep every character action and story element from the original scene EXACTLY as written — do not change what happens
-- Do NOT add new characters or change character appearances
-- Output ONLY the rewritten prompt as one paragraph, no headers, no quotes, no explanations
-- Maximum 120 words
+STRICT RULES:
+- Preserve every story action and character name exactly — do not change what happens
+- Do NOT add new characters
+- Faces must be unobstructed and clearly visible — this is critical
+- Output ONE paragraph only, no headers, no bullets, no quotes
+- Max 130 words
 
 SCENE: ${scenePrompt}`,
         }],
@@ -39,8 +47,7 @@ SCENE: ${scenePrompt}`,
     });
 
     const enhanced = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    // Sanity check — reject garbage or overly short rewrites
-    if (!enhanced || enhanced.length < 30 || enhanced.length > 1500) return scenePrompt;
+    if (!enhanced || enhanced.length < 30 || enhanced.length > 1800) return scenePrompt;
     return enhanced;
   } catch {
     return scenePrompt;
