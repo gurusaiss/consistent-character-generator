@@ -11,6 +11,7 @@ import { generateWithFalPuLID, generateWithFalLoRA } from '../services/falGenera
 import { enhanceScenePrompt } from '../services/promptEnhance.js';
 import { upscaleImage } from '../services/upscaleService.js';
 import { applyFaceSwaps } from '../services/faceSwapService.js';
+import { generateWithGeminiImage } from '../services/geminiImageGenerate.js';
 
 const router = Router();
 
@@ -124,8 +125,6 @@ function buildTextPrompt(chars: CharData[], stylePrompt: string, scenePrompt: st
 }
 
 async function runImagenGeneration(ai: GoogleGenAI, chars: CharData[], stylePrompt: string, scenePrompt: string, retry = false): Promise<{ imageData: string; mimeType: string }> {
-  const charsWithImages = chars.filter(c => c.fetchedBase64);
-
   // Build a detailed prompt that explicitly names all character physical attributes
   const charDescriptions = chars.map(c => {
     const spec = c.visual_dna || c.description;
@@ -139,30 +138,14 @@ async function runImagenGeneration(ai: GoogleGenAI, chars: CharData[], styleProm
     'masterpiece quality, highly detailed faces, sharp focus, photorealistic skin, cinematic lighting, single panel, no text, no watermarks, no borders',
   ].filter(Boolean).join('. ');
 
-  // Build referenceImages array — Imagen 3 supports SUBJECT reference conditioning
-  // This actually uses the face/person reference to guide generation
-  const referenceImages = charsWithImages.map((c, i) => ({
-    referenceType: 'REFERENCE_TYPE_PERSON',
-    referenceId: i + 1,
-    referenceImage: {
-      bytesBase64Encoded: c.fetchedBase64,
-      mimeType: c.mime_type || 'image/jpeg',
-    },
-    personImageConfig: {
-      personDescription: c.visual_dna || c.description || c.name,
-    },
-  }));
-
+  // Note: referenceImages/subject conditioning is Vertex-only — not supported on the
+  // Gemini API Imagen endpoint. Text-only here; face conditioning is handled by the
+  // Gemini 2.5 Flash Image generator, PuLID, and the face-swap post-process step.
   const config: Record<string, any> = {
     numberOfImages: 1,
     outputMimeType: 'image/jpeg',
     personGeneration: 'allow_adult',
   };
-
-  // Only attach referenceImages when we have them — falls back to text-only otherwise
-  if (referenceImages.length > 0) {
-    config.referenceImages = referenceImages;
-  }
 
   const response = await (ai.models as any).generateImages({
     model: 'imagen-3.0-generate-002',
@@ -335,7 +318,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       : Promise.resolve(null);
 
     // ── Run all generators in parallel ────────────────────────────────────
-    const [hfSettled, pollinationsSettled, cfSettled, imagenSettled, togetherSettled, falPulidSettled, falLoraSettled] = await Promise.allSettled([
+    const [hfSettled, pollinationsSettled, cfSettled, imagenSettled, togetherSettled, falPulidSettled, falLoraSettled, geminiImgSettled] = await Promise.allSettled([
       generateWithHF(enhancedPrompt, stylePrompt, charSpecs),
       generateWithPollinations(enhancedPrompt, stylePrompt, charSpecs),
       generateWithCloudflare(enhancedPrompt, stylePrompt, charSpecs),
@@ -343,10 +326,15 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       generateWithFlux(enhancedPrompt, stylePrompt, charSpecs),
       generateWithFalPuLID(enhancedPrompt, stylePrompt, charSpecs), // face-conditioning (no training needed)
       loraGenPromise,                                               // trained LoRA (best consistency, if ready)
+      generateWithGeminiImage(process.env.GEMINI_API_KEY!, enhancedPrompt, stylePrompt, charData), // sees reference photos natively
     ]);
 
     // Score each successful result
     const candidates: Candidate[] = [];
+
+    // Models that see the reference face during generation — inherently more
+    // identity-accurate, so they get a small tiebreak bonus in scoring
+    const IDENTITY_MODELS = new Set(['gemini-image', 'fal-pulid', 'fal-lora']);
 
     const results: Array<{ settled: PromiseSettledResult<any>; model: string }> = [
       { settled: hfSettled,           model: 'huggingface' },
@@ -356,6 +344,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
       { settled: togetherSettled,     model: 'together' },
       { settled: falPulidSettled,     model: 'fal-pulid' },
       { settled: falLoraSettled,      model: 'fal-lora' },
+      { settled: geminiImgSettled,    model: 'gemini-image' },
     ];
 
     await Promise.all(results.map(async ({ settled, model }) => {
@@ -367,7 +356,8 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
             checkConsistency(ai, charData, imageData),
             scoreQuality(ai, imageData),
           ]);
-          const score = Math.round(consistency * 0.65 + quality * 0.35);
+          const identityBonus = IDENTITY_MODELS.has(model) && charData.some(c => c.fetchedBase64) ? 5 : 0;
+          const score = Math.min(100, Math.round(consistency * 0.65 + quality * 0.35) + identityBonus);
           candidates.push({ imageData, mimeType, model, score });
         } catch {
           candidates.push({ imageData, mimeType, model, score: 75 });
