@@ -124,6 +124,11 @@ function buildTextPrompt(chars: CharData[], stylePrompt: string, scenePrompt: st
   ].filter(Boolean).join('\n');
 }
 
+// Imagen 3 (imagen-3.0-generate-002) currently 404s on this free-tier Gemini
+// API key — it needs a billing-enabled project to be callable at all. Left
+// active (not hardcoded off) so that if billing is ever enabled on the key,
+// this starts working automatically with no code change. Promise.allSettled
+// upstream already swallows the failure gracefully when it's unavailable.
 async function runImagenGeneration(ai: GoogleGenAI, chars: CharData[], stylePrompt: string, scenePrompt: string, retry = false): Promise<{ imageData: string; mimeType: string }> {
   // Build a detailed prompt that explicitly names all character physical attributes
   const charDescriptions = chars.map(c => {
