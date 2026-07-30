@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { userOwnsProject, userOwnsScene } from '../utils/ownership.js';
 
 const router = Router();
 
@@ -12,6 +13,11 @@ function extractPath(url: string, bucket: string): string | null {
 
 // GET /api/projects/:id/scenes
 router.get('/projects/:id/scenes', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsProject(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
   const { data, error } = await supabase
     .from('scenes')
     .select('*')
@@ -24,6 +30,11 @@ router.get('/projects/:id/scenes', requireAuth, async (req, res) => {
 
 // POST /api/projects/:id/scenes — bulk replace
 router.post('/projects/:id/scenes', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsProject(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
   const { scenes } = req.body;
   if (!Array.isArray(scenes)) return res.status(400).json({ error: 'scenes must be array' });
   const projectId = req.params.id;
@@ -73,6 +84,11 @@ router.post('/projects/:id/scenes', requireAuth, async (req, res) => {
 
 // PUT /api/scenes/:id
 router.put('/scenes/:id', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsScene(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Scene not found' });
+  }
+
   const { prompt, status, generated_image_url, error_message, scene_number } = req.body;
 
   const updates: Record<string, any> = {};
@@ -95,6 +111,11 @@ router.put('/scenes/:id', requireAuth, async (req, res) => {
 
 // DELETE /api/scenes/:id
 router.delete('/scenes/:id', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsScene(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Scene not found' });
+  }
+
   const { data: scene } = await supabase
     .from('scenes')
     .select('generated_image_url, project_id')

@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -33,6 +34,7 @@ app.use(cors({
   },
   credentials: true,
 }));
+app.use(compression());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -54,6 +56,16 @@ if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   });
 }
+
+// Safety-net error handler — catches anything a route forgot to try/catch
+// itself, so a bug never surfaces as a hung connection or a raw stack trace.
+// Must be registered last, after all routes/middleware, with 4 args so
+// Express recognizes it as an error handler.
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('Unhandled error:', err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

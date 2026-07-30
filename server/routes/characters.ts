@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { startLoRATraining, getTrainingStatus } from '../services/loraTrainService.js';
+import { userOwnsProject, userOwnsCharacter } from '../utils/ownership.js';
 
 async function extractCharacterDNA(base64: string, mimeType: string, name: string): Promise<string> {
   if (!process.env.GEMINI_API_KEY) return '';
@@ -81,6 +82,11 @@ async function uploadExtraImage(base64: string, mimeType: string, charId: string
 
 // GET /api/projects/:id/characters
 router.get('/projects/:id/characters', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsProject(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
   const { data, error } = await supabase
     .from('characters')
     .select('*')
@@ -93,6 +99,11 @@ router.get('/projects/:id/characters', requireAuth, async (req, res) => {
 
 // POST /api/projects/:id/characters
 router.post('/projects/:id/characters', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsProject(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
   const { name, description = '', base_image = '', mime_type = 'image/jpeg', extra_images = [] } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
@@ -150,6 +161,11 @@ router.post('/projects/:id/characters', requireAuth, async (req, res) => {
 
 // PUT /api/characters/:id
 router.put('/characters/:id', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsCharacter(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+
   const { name, description, base_image, mime_type, extra_images } = req.body;
 
   const { data: existing, error: fetchErr } = await supabase
@@ -214,6 +230,11 @@ router.put('/characters/:id', requireAuth, async (req, res) => {
 
 // POST /api/characters/:id/train — start LoRA training
 router.post('/characters/:id/train', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsCharacter(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+
   const { data: char, error: fetchErr } = await supabase
     .from('characters')
     .select('*')
@@ -262,6 +283,11 @@ router.post('/characters/:id/train', requireAuth, async (req, res) => {
 
 // GET /api/characters/:id/lora-status — poll training status
 router.get('/characters/:id/lora-status', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsCharacter(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+
   const { data: char, error: fetchErr } = await supabase
     .from('characters')
     .select('lora_status, lora_job_id, lora_url, lora_trigger_word, extra_image_urls, reference_image_url')
@@ -303,6 +329,11 @@ router.get('/characters/:id/lora-status', requireAuth, async (req, res) => {
 
 // DELETE /api/characters/:id
 router.delete('/characters/:id', requireAuth, async (req, res) => {
+  const userId = (req as AuthRequest).user.id;
+  if (!(await userOwnsCharacter(req.params.id, userId))) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+
   const { data: char } = await supabase
     .from('characters')
     .select('reference_image_url')

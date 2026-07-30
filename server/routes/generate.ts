@@ -12,6 +12,7 @@ import { enhanceScenePrompt } from '../services/promptEnhance.js';
 import { upscaleImage } from '../services/upscaleService.js';
 import { applyFaceSwaps } from '../services/faceSwapService.js';
 import { generateWithGeminiImage } from '../services/geminiImageGenerate.js';
+import { userOwnsProject, userOwnsScene } from '../utils/ownership.js';
 
 const router = Router();
 
@@ -259,6 +260,14 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
   if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({ error: 'GEMINI_API_KEY not configured.' });
+  }
+
+  // Ownership checks — projectId/sceneId are client-supplied, must not trust them blindly
+  if (projectId && !(await userOwnsProject(projectId, userId))) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  if (sceneId && !(await userOwnsScene(sceneId, userId))) {
+    return res.status(404).json({ error: 'Scene not found' });
   }
 
   // Check credits
