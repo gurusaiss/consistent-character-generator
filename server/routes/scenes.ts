@@ -2,6 +2,15 @@ import { Router } from 'express';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { userOwnsProject, userOwnsScene } from '../utils/ownership.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { logger } from '../utils/logger.js';
+import {
+  idParamSchema,
+  scenesBulkSchema,
+  sceneUpdateSchema,
+  validate,
+  validateParams,
+} from '../utils/validation.js';
 
 const router = Router();
 
@@ -12,7 +21,7 @@ function extractPath(url: string, bucket: string): string | null {
 }
 
 // GET /api/projects/:id/scenes
-router.get('/projects/:id/scenes', requireAuth, async (req, res) => {
+router.get('/projects/:id/scenes', requireAuth, validateParams(idParamSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsProject(req.params.id, userId))) {
     return res.status(404).json({ error: 'Project not found' });
@@ -24,19 +33,21 @@ router.get('/projects/:id/scenes', requireAuth, async (req, res) => {
     .eq('project_id', req.params.id)
     .order('scene_number');
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logger.error('Scene list failed', { projectId: req.params.id, error: error.message });
+    return res.status(500).json({ error: error.message });
+  }
   res.json(data);
-});
+}));
 
 // POST /api/projects/:id/scenes — bulk replace
-router.post('/projects/:id/scenes', requireAuth, async (req, res) => {
+router.post('/projects/:id/scenes', requireAuth, validateParams(idParamSchema), validate(scenesBulkSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsProject(req.params.id, userId))) {
     return res.status(404).json({ error: 'Project not found' });
   }
 
   const { scenes } = req.body;
-  if (!Array.isArray(scenes)) return res.status(400).json({ error: 'scenes must be array' });
   const projectId = req.params.id;
 
   // Get existing scenes to clean up their images
@@ -72,7 +83,10 @@ router.post('/projects/:id/scenes', requireAuth, async (req, res) => {
   }));
 
   const { data, error } = await supabase.from('scenes').insert(rows).select();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logger.error('Scene bulk replace failed', { projectId, error: error.message });
+    return res.status(500).json({ error: error.message });
+  }
 
   await supabase.from('projects').update({
     scene_count: scenes.length,
@@ -80,10 +94,10 @@ router.post('/projects/:id/scenes', requireAuth, async (req, res) => {
   }).eq('id', projectId);
 
   res.status(201).json(data);
-});
+}));
 
 // PUT /api/scenes/:id
-router.put('/scenes/:id', requireAuth, async (req, res) => {
+router.put('/scenes/:id', requireAuth, validateParams(idParamSchema), validate(sceneUpdateSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsScene(req.params.id, userId))) {
     return res.status(404).json({ error: 'Scene not found' });
@@ -107,10 +121,10 @@ router.put('/scenes/:id', requireAuth, async (req, res) => {
 
   if (error || !data) return res.status(404).json({ error: 'Scene not found' });
   res.json(data);
-});
+}));
 
 // DELETE /api/scenes/:id
-router.delete('/scenes/:id', requireAuth, async (req, res) => {
+router.delete('/scenes/:id', requireAuth, validateParams(idParamSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsScene(req.params.id, userId))) {
     return res.status(404).json({ error: 'Scene not found' });
@@ -128,8 +142,11 @@ router.delete('/scenes/:id', requireAuth, async (req, res) => {
   }
 
   const { error } = await supabase.from('scenes').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logger.error('Scene delete failed', { sceneId: req.params.id, error: error.message });
+    return res.status(500).json({ error: error.message });
+  }
   res.json({ success: true });
-});
+}));
 
 export default router;

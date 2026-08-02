@@ -64,7 +64,7 @@ npm run build    # Vite builds frontend to dist/
 npm start        # Express serves dist/ + API on the same process
 ```
 
-Deployed as a single Render Blueprint service (`render.yaml`) — see `DEPLOY.md` for the full manual deploy steps (no CI/CD pipeline exists yet).
+Deployed as a single Render Blueprint service (`render.yaml`). CI runs on GitHub Actions (`.github/workflows/ci.yml`): typecheck → test → build on every push.
 
 ## Project Structure
 
@@ -105,7 +105,6 @@ See `.env.example` for the full list. `GEMINI_API_KEY` and the Supabase vars are
 
 ## Known Gaps
 
-- No automated test suite
-- No CI/CD pipeline (manual Render deploy)
 - Rate limiter is in-memory — resets on restart, not shared across multiple instances
 - No embedding-based face-similarity metric — consistency scoring is LLM-judge-only
+- fal.ai generators (face-swap, LoRA, upscale) require a paid balance; they degrade gracefully to null when balance is zero

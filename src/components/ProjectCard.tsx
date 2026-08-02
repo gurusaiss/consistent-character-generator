@@ -25,12 +25,14 @@ export default function ProjectCard({ project, onEdit, onDelete }: Props) {
         {project.thumbnail_url ? (
           <img
             src={project.thumbnail_url}
-            alt={project.name}
+            alt={`Thumbnail for storyboard "${project.name}"`}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover"
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-violet-900/40 to-cyan-900/20 flex items-center justify-center">
-            <svg className="w-12 h-12 text-violet-500/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-12 h-12 text-violet-500/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
@@ -52,21 +54,24 @@ export default function ProjectCard({ project, onEdit, onDelete }: Props) {
       </div>
 
       {/* Hover actions */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-5 gap-2">
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-5 gap-2">
         <button
           onClick={(e) => { e.stopPropagation(); navigate(`/editor/${project.id}`); }}
+          aria-label={`Open ${project.name}`}
           className="btn-primary text-sm py-2 px-4"
         >
           Open
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onEdit(project); }}
+          aria-label={`Edit ${project.name}`}
           className="btn-secondary text-sm py-2 px-4"
         >
           Edit
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(project); }}
+          aria-label={`Delete ${project.name}`}
           className="btn-danger text-sm py-1.5 px-3"
         >
           Delete

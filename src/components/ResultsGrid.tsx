@@ -58,7 +58,7 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
       {scenes.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
           <div className="w-14 h-14 rounded-full bg-cyan-600/10 border border-cyan-500/20 flex items-center justify-center mb-3">
-            <svg className="w-6 h-6 text-cyan-500/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-6 h-6 text-cyan-500/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
@@ -73,19 +73,23 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
                 <div className="relative">
                   <img
                     src={scene.generated_image_url}
-                    alt={`Scene ${scene.scene_number}`}
+                    alt={`Scene ${scene.scene_number}${scene.prompt ? `: ${scene.prompt}` : ''}`}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full cursor-pointer hover:opacity-90 transition-opacity"
                     onClick={() => onImageClick(scene)}
                   />
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 flex items-center justify-center gap-2">
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-black/40 flex items-center justify-center gap-2">
                     <button
                       onClick={() => onImageClick(scene)}
+                      aria-label={`View scene ${scene.scene_number} full size`}
                       className="bg-white/20 hover:bg-white/30 backdrop-blur text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
                     >
                       View
                     </button>
                     <button
                       onClick={() => downloadImage(scene.generated_image_url, `scene-${scene.scene_number}.png`)}
+                      aria-label={`Download scene ${scene.scene_number}`}
                       className="bg-violet-600/80 hover:bg-violet-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
                     >
                       Download
@@ -117,16 +121,16 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
                   )}
                 </div>
               ) : scene.status === 'loading' ? (
-                <div className="h-40 flex flex-col items-center justify-center gap-2">
-                  <svg className="w-6 h-6 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                <div className="h-40 flex flex-col items-center justify-center gap-2" role="status">
+                  <svg className="w-6 h-6 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                   <p className="text-slate-500 text-xs">Generating scene {scene.scene_number}…</p>
                 </div>
               ) : scene.status === 'error' ? (
-                <div className="h-28 flex flex-col items-center justify-center gap-2 px-4">
-                  <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="h-28 flex flex-col items-center justify-center gap-2 px-4" role="alert">
+                  <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <p className="text-red-400 text-xs text-center">Scene {scene.scene_number}: {scene.error_message || 'Failed'}</p>

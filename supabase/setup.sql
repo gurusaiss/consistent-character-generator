@@ -1,7 +1,7 @@
 -- ============================================================================
 -- ConsistentAI — COMPLETE database setup. Run this ONCE in:
 -- Supabase Dashboard → SQL Editor → New query → paste all → Run.
--- This is idempotent-friendly and combines migrations 001–004 + storage.
+-- This is idempotent (safe to re-run) and combines migrations 001–006 + storage.
 -- ============================================================================
 
 -- Enable UUID extension
@@ -40,6 +40,11 @@ create table if not exists public.characters (
   reference_image_url text not null default '',
   mime_type text not null default 'image/jpeg',
   visual_dna text not null default '',
+  lora_status text default 'none',
+  lora_url text,
+  lora_trigger_word text,
+  lora_job_id text,
+  extra_image_urls jsonb default '[]',
   created_at timestamptz not null default now()
 );
 
@@ -54,23 +59,36 @@ create table if not exists public.scenes (
   error_message text not null default '',
   consistency_score integer default null,
   model_used text default null,
+  enhanced_prompt text default null,
   created_at timestamptz not null default now()
 );
 
 -- ── Columns for existing installs (safe to re-run) ──────────────────────────
 alter table public.profiles   add column if not exists generations_limit integer not null default 30;
 alter table public.characters add column if not exists visual_dna text not null default '';
+alter table public.characters add column if not exists lora_status text default 'none';
+alter table public.characters add column if not exists lora_url text;
+alter table public.characters add column if not exists lora_trigger_word text;
+alter table public.characters add column if not exists lora_job_id text;
+alter table public.characters add column if not exists extra_image_urls jsonb default '[]';
 alter table public.scenes     add column if not exists consistency_score integer default null;
 alter table public.scenes     add column if not exists model_used text default null;
+alter table public.scenes     add column if not exists enhanced_prompt text default null;
 
 -- ── Indexes ─────────────────────────────────────────────────────────────────
 create index if not exists idx_projects_user_id on public.projects(user_id);
 create index if not exists idx_projects_updated_at on public.projects(updated_at desc);
 create index if not exists idx_characters_project_id on public.characters(project_id);
+create index if not exists idx_characters_lora_status on public.characters(lora_status);
 create index if not exists idx_scenes_project_id on public.scenes(project_id);
 create index if not exists idx_scenes_order on public.scenes(project_id, scene_number);
 
 -- ── Row Level Security ──────────────────────────────────────────────────────
+-- DEFENSE IN DEPTH ONLY. The API server connects with the service-role key,
+-- which bypasses RLS entirely — server/utils/ownership.ts is the live
+-- authorization check for every request. These policies protect only direct
+-- anon/authenticated-key access (e.g. the Supabase dashboard or a future
+-- browser-side client). Never rely on them to secure a server route.
 alter table public.profiles   enable row level security;
 alter table public.projects   enable row level security;
 alter table public.characters enable row level security;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api } from '../services/api';
 import type { Project, Scene } from '../types';
@@ -28,9 +29,11 @@ async function downloadImage(url: string, filename: string) {
 }
 
 export default function Gallery() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
   const [filterProject, setFilterProject] = useState<string>('all');
 
@@ -41,6 +44,7 @@ export default function Gallery() {
   async function loadGallery() {
     try {
       setLoading(true);
+      setLoadError(null);
       const projectList = await api.projects.list();
       setProjects(projectList);
 
@@ -94,6 +98,7 @@ export default function Gallery() {
           <select
             value={filterProject}
             onChange={(e) => setFilterProject(e.target.value)}
+            aria-label="Filter gallery by project"
             className="input-dark max-w-xs"
           >
             <option value="all">All Projects</option>
@@ -105,8 +110,8 @@ export default function Gallery() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <svg className="w-8 h-8 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24">
+        <div className="flex items-center justify-center py-24" role="status" aria-label="Loading gallery">
+          <svg className="w-8 h-8 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
@@ -114,7 +119,7 @@ export default function Gallery() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-24 glass-card">
           <div className="w-20 h-20 rounded-2xl bg-cyan-600/10 border border-cyan-500/20 flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-cyan-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-10 h-10 text-cyan-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
@@ -122,8 +127,15 @@ export default function Gallery() {
           <p className="text-slate-500 text-sm">
             {filterProject !== 'all'
               ? 'No images generated for this project yet'
-              : 'Generate some scenes in the editor to see images here'}
+              : projects.length === 0
+                ? 'Create a storyboard project first, then generate scenes to fill your gallery'
+                : 'Generate some scenes in the editor to see images here'}
           </p>
+          {filterProject === 'all' && (
+            <button onClick={() => navigate('/dashboard')} className="btn-primary mt-6">
+              {projects.length === 0 ? 'Create First Project' : 'Go to My Storyboards'}
+            </button>
+          )}
         </div>
       ) : (
         <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
@@ -136,10 +148,12 @@ export default function Gallery() {
               <div className="relative">
                 <img
                   src={scene.generated_image_url}
-                  alt={`Scene ${scene.scene_number}`}
+                  alt={`${projectName} — scene ${scene.scene_number}${scene.prompt ? `: ${scene.prompt}` : ''}`}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                   <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
                     <div>
                       <p className="text-white text-xs font-medium">{projectName}</p>
@@ -150,6 +164,7 @@ export default function Gallery() {
                         e.stopPropagation();
                         downloadImage(scene.generated_image_url, `${projectName}-scene-${scene.scene_number}.png`);
                       }}
+                      aria-label={`Download ${projectName} scene ${scene.scene_number}`}
                       className="bg-violet-600/80 hover:bg-violet-600 text-white text-xs px-2.5 py-1 rounded-lg transition-colors"
                     >
                       ↓

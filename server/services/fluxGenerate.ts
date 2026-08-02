@@ -3,6 +3,14 @@
  * Falls back gracefully (returns null) on any failure.
  */
 
+import { sanitizeUserText } from './promptEnhance.js';
+
+const TOGETHER_ENDPOINT = 'https://api.together.xyz/v1/images/generations';
+// dev -> schnell -> CDN download run sequentially, so they share one budget
+const TOGETHER_TOTAL_BUDGET_MS = 90000;
+const TOGETHER_ATTEMPT_TIMEOUT_MS = 60000;
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 20000;
+
 interface FluxResult {
   imageData: string; // base64
   mimeType: string;
@@ -22,26 +30,41 @@ export async function generateWithFlux(
   const apiKey = process.env.TOGETHER_API_KEY;
   if (!apiKey) return null;
 
-  const charBlock = chars
-    .filter(c => c.visual_dna || c.description)
-    .map(c => `${c.name} (${c.visual_dna || c.description})`)
-    .join(', ');
-
-  const fullPrompt = [
-    charBlock ? `Characters: ${charBlock}` : '',
-    stylePrompt,
-    prompt,
-    'masterpiece, best quality, highly detailed faces, sharp focus, 8k uhd, photorealistic skin texture, cinematic lighting, single panel, no text, no watermarks, no borders',
-  ].filter(Boolean).join(', ');
-
   try {
+    const charBlock = (Array.isArray(chars) ? chars : [])
+      .filter(c => c?.visual_dna || c?.description)
+      .map(c => `${sanitizeUserText(c.name, 80)} (${sanitizeUserText(c.visual_dna || c.description, 600)})`)
+      .join(', ');
+
+    const fullPrompt = [
+      charBlock ? `Characters: ${charBlock}` : '',
+      stylePrompt,
+      sanitizeUserText(prompt),
+      'masterpiece, best quality, highly detailed faces, sharp focus, 8k uhd, photorealistic skin texture, cinematic lighting, single panel, no text, no watermarks, no borders',
+    ].filter(Boolean).join(', ');
+
+    const deadline = Date.now() + TOGETHER_TOTAL_BUDGET_MS;
+    const budget = (max: number) => AbortSignal.timeout(Math.max(1000, Math.min(max, deadline - Date.now())));
+
+    const headers = {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    };
+
+    const download = async (url: string): Promise<FluxResult | null> => {
+      const imgRes = await fetch(url, { signal: budget(IMAGE_DOWNLOAD_TIMEOUT_MS) });
+      if (!imgRes.ok) {
+        console.warn(`[together] image download failed: HTTP ${imgRes.status}`);
+        return null;
+      }
+      const buf = await imgRes.arrayBuffer();
+      return { imageData: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' };
+    };
+
     // FLUX.1-dev: significantly higher quality than schnell, better character fidelity
-    const res = await fetch('https://api.together.xyz/v1/images/generations', {
+    const res = await fetch(TOGETHER_ENDPOINT, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         model: 'black-forest-labs/FLUX.1-dev',
         prompt: fullPrompt,
@@ -50,16 +73,14 @@ export async function generateWithFlux(
         steps: 25,
         n: 1,
       }),
+      signal: budget(TOGETHER_ATTEMPT_TIMEOUT_MS),
     });
 
     if (!res.ok) {
       // Fallback to schnell-Free if dev is unavailable
-      const fallback = await fetch('https://api.together.xyz/v1/images/generations', {
+      const fallback = await fetch(TOGETHER_ENDPOINT, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           model: 'black-forest-labs/FLUX.1-schnell-Free',
           prompt: fullPrompt,
@@ -68,35 +89,32 @@ export async function generateWithFlux(
           steps: 4,
           n: 1,
         }),
+        signal: budget(TOGETHER_ATTEMPT_TIMEOUT_MS),
       });
       if (!fallback.ok) {
         const body = await fallback.text().catch(() => '');
-        console.warn(`Together AI fallback error ${fallback.status}:`, body.slice(0, 200));
+        console.warn(`[together] schnell fallback failed: HTTP ${fallback.status}`, body.slice(0, 200));
         return null;
       }
       const fallbackData: any = await fallback.json();
       const url: string | undefined = fallbackData.data?.[0]?.url;
-      if (!url) return null;
-      const imgRes = await fetch(url);
-      if (!imgRes.ok) return null;
-      const buf = await imgRes.arrayBuffer();
-      return { imageData: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' };
+      if (!url) {
+        const b64: string | undefined = fallbackData.data?.[0]?.b64_json;
+        return b64 ? { imageData: b64, mimeType: 'image/jpeg' } : null;
+      }
+      return await download(url);
     }
 
     const data: any = await res.json();
     const imageUrl: string | undefined = data.data?.[0]?.url;
     if (!imageUrl) {
       const b64: string | undefined = data.data?.[0]?.b64_json;
-      if (b64) return { imageData: b64, mimeType: 'image/jpeg' };
-      return null;
+      return b64 ? { imageData: b64, mimeType: 'image/jpeg' } : null;
     }
 
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) return null;
-    const buffer = await imgRes.arrayBuffer();
-    return { imageData: Buffer.from(buffer).toString('base64'), mimeType: 'image/jpeg' };
+    return await download(imageUrl);
   } catch (err) {
-    console.warn('Together AI generation error:', err instanceof Error ? err.message : err);
+    console.warn('[together] generation failed:', err instanceof Error ? err.message : err);
     return null;
   }
 }

@@ -38,6 +38,9 @@ export default function ImageModal({ scene, onClose, projectName }: Props) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="image-modal-title"
     >
       <div
         className="glass-card max-w-4xl w-full max-h-[90vh] overflow-auto"
@@ -47,7 +50,7 @@ export default function ImageModal({ scene, onClose, projectName }: Props) {
           <div>
             {projectName && <p className="text-slate-500 text-xs">{projectName}</p>}
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-slate-200 font-medium">Scene {scene.scene_number}</p>
+              <p id="image-modal-title" className="text-slate-200 font-medium">Scene {scene.scene_number}</p>
               {scene.consistency_score !== null && (
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                   scene.consistency_score >= 85 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
@@ -78,7 +81,7 @@ export default function ImageModal({ scene, onClose, projectName }: Props) {
                 Download
               </button>
             )}
-            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center text-slate-400">
+            <button onClick={onClose} aria-label="Close image preview" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center text-slate-400">
               ✕
             </button>
           </div>
@@ -87,7 +90,8 @@ export default function ImageModal({ scene, onClose, projectName }: Props) {
         {scene.generated_image_url && (
           <img
             src={scene.generated_image_url}
-            alt={`Scene ${scene.scene_number}`}
+            alt={`Scene ${scene.scene_number}${scene.prompt ? `: ${scene.prompt}` : ''}`}
+            decoding="async"
             className="w-full"
           />
         )}

@@ -15,9 +15,10 @@ function EnhancedPromptBadge({ scene }: { scene: Scene }) {
     <div className="mt-1.5">
       <button
         onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
         className="text-[10px] text-violet-400/70 hover:text-violet-400 flex items-center gap-1 transition-colors"
       >
-        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
         {open ? 'Hide' : 'View'} AI-enhanced prompt
@@ -82,7 +83,7 @@ export default function SceneList({ scenes, onDelete, onRetry }: Props) {
               <span className={`text-xs px-2 py-0.5 rounded-full border ${statusColors[scene.status]}`}>
                 {scene.status === 'loading' ? (
                   <span className="flex items-center gap-1">
-                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
@@ -93,6 +94,7 @@ export default function SceneList({ scenes, onDelete, onRetry }: Props) {
               {scene.status === 'error' && (
                 <button
                   onClick={() => onRetry(scene)}
+                  aria-label={`Retry scene ${scene.scene_number}`}
                   className="text-xs px-2 py-0.5 rounded bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition-colors border border-blue-500/20"
                 >
                   Retry
@@ -100,7 +102,8 @@ export default function SceneList({ scenes, onDelete, onRetry }: Props) {
               )}
               <button
                 onClick={() => onDelete(scene)}
-                className="opacity-0 group-hover:opacity-100 text-xs px-2 py-0.5 rounded bg-red-600/10 text-red-400 hover:bg-red-600/20 transition-all border border-red-500/20"
+                aria-label={`Delete scene ${scene.scene_number}`}
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-xs px-2 py-0.5 rounded bg-red-600/10 text-red-400 hover:bg-red-600/20 transition-all border border-red-500/20"
               >
                 ×
               </button>

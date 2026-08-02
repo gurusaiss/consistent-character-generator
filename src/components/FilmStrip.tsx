@@ -40,7 +40,7 @@ export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRe
   return (
     <div className="relative select-none">
       {/* Top sprocket holes */}
-      <div className="flex gap-0 h-3 bg-black/60 border-y border-white/10 overflow-hidden">
+      <div className="flex gap-0 h-3 bg-black/60 border-y border-white/10 overflow-hidden" aria-hidden="true">
         {Array.from({ length: 60 }).map((_, i) => (
           <div key={i} className="shrink-0 w-6 h-full flex items-center justify-center">
             <div className="w-2 h-1.5 rounded-sm bg-white/15" />
@@ -74,13 +74,17 @@ export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRe
                 {isSuccess ? (
                   <img
                     src={scene.generated_image_url}
-                    alt={`Scene ${scene.scene_number}`}
+                    alt={`Scene ${scene.scene_number}${scene.prompt ? `: ${scene.prompt}` : ''}`}
+                    loading="lazy"
+                    decoding="async"
+                    width={176}
+                    height={120}
                     className="w-full h-full object-cover"
                     draggable={false}
                   />
                 ) : isLoading ? (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-                    <svg className="w-5 h-5 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2" role="status">
+                    <svg className="w-5 h-5 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
@@ -131,10 +135,11 @@ export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRe
                 )}
 
                 {/* Hover overlay */}
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 flex items-center justify-center gap-1.5">
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-black/50 flex items-center justify-center gap-1.5">
                   {isError && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onRetry(scene); }}
+                      aria-label={`Retry scene ${scene.scene_number}`}
                       className="text-[10px] bg-blue-600/80 hover:bg-blue-600 text-white px-2 py-1 rounded transition-colors"
                     >
                       Retry
@@ -142,6 +147,7 @@ export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRe
                   )}
                   <button
                     onClick={(e) => { e.stopPropagation(); onDelete(scene); }}
+                    aria-label={`Delete scene ${scene.scene_number}`}
                     className="text-[10px] bg-red-600/80 hover:bg-red-600 text-white px-2 py-1 rounded transition-colors"
                   >
                     Delete
@@ -159,7 +165,7 @@ export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRe
       </div>
 
       {/* Bottom sprocket holes */}
-      <div className="flex gap-0 h-3 bg-black/60 border-y border-white/10 overflow-hidden">
+      <div className="flex gap-0 h-3 bg-black/60 border-y border-white/10 overflow-hidden" aria-hidden="true">
         {Array.from({ length: 60 }).map((_, i) => (
           <div key={i} className="shrink-0 w-6 h-full flex items-center justify-center">
             <div className="w-2 h-1.5 rounded-sm bg-white/15" />

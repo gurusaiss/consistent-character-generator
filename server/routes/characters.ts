@@ -5,6 +5,15 @@ import { supabase } from '../supabase.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { startLoRATraining, getTrainingStatus } from '../services/loraTrainService.js';
 import { userOwnsProject, userOwnsCharacter } from '../utils/ownership.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { logger } from '../utils/logger.js';
+import {
+  characterCreateSchema,
+  characterUpdateSchema,
+  idParamSchema,
+  validate,
+  validateParams,
+} from '../utils/validation.js';
 
 async function extractCharacterDNA(base64: string, mimeType: string, name: string): Promise<string> {
   if (!process.env.GEMINI_API_KEY) return '';
@@ -81,7 +90,7 @@ async function uploadExtraImage(base64: string, mimeType: string, charId: string
 }
 
 // GET /api/projects/:id/characters
-router.get('/projects/:id/characters', requireAuth, async (req, res) => {
+router.get('/projects/:id/characters', requireAuth, validateParams(idParamSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsProject(req.params.id, userId))) {
     return res.status(404).json({ error: 'Project not found' });
@@ -93,19 +102,21 @@ router.get('/projects/:id/characters', requireAuth, async (req, res) => {
     .eq('project_id', req.params.id)
     .order('created_at');
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logger.error('Character list failed', { projectId: req.params.id, error: error.message });
+    return res.status(500).json({ error: error.message });
+  }
   res.json(data);
-});
+}));
 
 // POST /api/projects/:id/characters
-router.post('/projects/:id/characters', requireAuth, async (req, res) => {
+router.post('/projects/:id/characters', requireAuth, validateParams(idParamSchema), validate(characterCreateSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsProject(req.params.id, userId))) {
     return res.status(404).json({ error: 'Project not found' });
   }
 
   const { name, description = '', base_image = '', mime_type = 'image/jpeg', extra_images = [] } = req.body;
-  if (!name) return res.status(400).json({ error: 'Name is required' });
 
   const charId = uuidv4();
   let reference_image_url = '';
@@ -132,7 +143,7 @@ router.post('/projects/:id/characters', requireAuth, async (req, res) => {
         )
       );
     } catch (err: any) {
-      console.warn('Extra image upload error:', err.message);
+      logger.warn('Extra image upload failed', { characterId: charId, error: err.message });
     }
   }
 
@@ -152,15 +163,18 @@ router.post('/projects/:id/characters', requireAuth, async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logger.error('Character create failed', { projectId: req.params.id, error: error.message });
+    return res.status(500).json({ error: error.message });
+  }
 
   await supabase.from('projects').update({ updated_at: new Date().toISOString() }).eq('id', req.params.id);
 
   res.status(201).json(data);
-});
+}));
 
 // PUT /api/characters/:id
-router.put('/characters/:id', requireAuth, async (req, res) => {
+router.put('/characters/:id', requireAuth, validateParams(idParamSchema), validate(characterUpdateSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsCharacter(req.params.id, userId))) {
     return res.status(404).json({ error: 'Character not found' });
@@ -213,7 +227,7 @@ router.put('/characters/:id', requireAuth, async (req, res) => {
       );
       updates.extra_image_urls = [...existingExtra, ...newExtra];
     } catch (err: any) {
-      console.warn('Extra image upload error:', err.message);
+      logger.warn('Extra image upload failed', { characterId: req.params.id, error: err.message });
     }
   }
 
@@ -224,12 +238,15 @@ router.put('/characters/:id', requireAuth, async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logger.error('Character update failed', { characterId: req.params.id, error: error.message });
+    return res.status(500).json({ error: error.message });
+  }
   res.json(data);
-});
+}));
 
 // POST /api/characters/:id/train — start LoRA training
-router.post('/characters/:id/train', requireAuth, async (req, res) => {
+router.post('/characters/:id/train', requireAuth, validateParams(idParamSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsCharacter(req.params.id, userId))) {
     return res.status(404).json({ error: 'Character not found' });
@@ -279,7 +296,7 @@ router.post('/characters/:id/train', requireAuth, async (req, res) => {
     await supabase.from('characters').update({ lora_status: 'failed' }).eq('id', req.params.id);
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
 // GET /api/characters/:id/lora-status — poll training status
 router.get('/characters/:id/lora-status', requireAuth, async (req, res) => {

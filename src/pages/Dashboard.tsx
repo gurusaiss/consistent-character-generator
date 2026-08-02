@@ -14,6 +14,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editProject, setEditProject] = useState<Project | null>(null);
@@ -28,9 +29,11 @@ export default function Dashboard() {
   async function loadProjects() {
     try {
       setLoading(true);
+      setLoadError(null);
       const data = await api.projects.list();
       setProjects(data);
     } catch (err: any) {
+      setLoadError(err.message || 'Unknown error');
       toast.error('Failed to load projects: ' + err.message);
     } finally {
       setLoading(false);
@@ -119,6 +122,7 @@ export default function Dashboard() {
             placeholder="Search projects…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search projects by name or description"
             className="input-dark max-w-sm"
           />
         </div>
@@ -126,16 +130,27 @@ export default function Dashboard() {
 
       {/* Content */}
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <svg className="w-8 h-8 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24">
+        <div className="flex items-center justify-center py-24" role="status" aria-label="Loading projects">
+          <svg className="w-8 h-8 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
         </div>
+      ) : loadError ? (
+        <div className="text-center py-24 glass-card" role="alert">
+          <div className="w-20 h-20 rounded-2xl bg-red-600/10 border border-red-500/20 flex items-center justify-center mx-auto mb-5">
+            <svg className="w-10 h-10 text-red-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-semibold text-slate-200 mb-2">Couldn't load your projects</h3>
+          <p className="text-slate-500 mb-6 font-mono text-sm">{loadError}</p>
+          <button onClick={loadProjects} className="btn-primary">Try Again</button>
+        </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-24 glass-card">
           <div className="w-20 h-20 rounded-2xl bg-violet-600/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-violet-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-10 h-10 text-violet-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
           </div>
@@ -213,16 +228,25 @@ export default function Dashboard() {
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
     >
       <div className="glass-card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-white/5">
           <h3 className="font-semibold text-slate-200">{title}</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors">✕</button>
+          <button onClick={onClose} aria-label={`Close ${title} dialog`} className="text-slate-500 hover:text-slate-200 transition-colors">✕</button>
         </div>
         <div className="p-5">{children}</div>
       </div>
@@ -243,8 +267,9 @@ function ProjectForm({
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm text-slate-400 mb-1.5">Project Name *</label>
+        <label htmlFor="project-name" className="block text-sm text-slate-400 mb-1.5">Project Name *</label>
         <input
+          id="project-name"
           type="text"
           value={formData.name}
           onChange={(e) => onChange({ ...formData, name: e.target.value })}
@@ -255,8 +280,9 @@ function ProjectForm({
         />
       </div>
       <div>
-        <label className="block text-sm text-slate-400 mb-1.5">Description</label>
+        <label htmlFor="project-description" className="block text-sm text-slate-400 mb-1.5">Description</label>
         <textarea
+          id="project-description"
           value={formData.description}
           onChange={(e) => onChange({ ...formData, description: e.target.value })}
           placeholder="A brief description of your story…"
