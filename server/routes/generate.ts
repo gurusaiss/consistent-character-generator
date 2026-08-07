@@ -13,8 +13,13 @@ import { upscaleImage } from '../services/upscaleService.js';
 import { applyFaceSwaps } from '../services/faceSwapService.js';
 import { generateWithGeminiImage } from '../services/geminiImageGenerate.js';
 import { userOwnsProject, userOwnsScene } from '../utils/ownership.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { logger } from '../utils/logger.js';
+import { generateSchema, validate } from '../utils/validation.js';
 
 const router = Router();
+
+const REFERENCE_IMAGE_FETCH_TIMEOUT_MS = 20000;
 
 const STYLE_PROMPTS: Record<string, string> = {
   cinematic:  'cinematic film still, photorealistic, movie production quality, dramatic lighting, widescreen composition',
@@ -26,7 +31,7 @@ const STYLE_PROMPTS: Record<string, string> = {
 };
 
 async function fetchImageAsBase64(url: string): Promise<string> {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(REFERENCE_IMAGE_FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
   const buffer = await res.arrayBuffer();
   return Buffer.from(buffer).toString('base64');
@@ -253,11 +258,10 @@ async function checkConsistency(
 }
 
 // POST /api/generate
-router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
+router.post('/generate', requireAuth, generateRateLimiter, validate(generateSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   const { projectId, sceneId, prompt, characters } = req.body;
 
-  if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({ error: 'GEMINI_API_KEY not configured.' });
   }
@@ -482,7 +486,7 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     });
 
   } catch (err: any) {
-    console.error('Generate error:', err);
+    logger.error('Generate failed', { userId, projectId, sceneId, error: err.message });
     if (sceneId) {
       try {
         await supabase.from('scenes').update({
@@ -493,6 +497,6 @@ router.post('/generate', requireAuth, generateRateLimiter, async (req, res) => {
     }
     res.status(500).json({ error: err.message || 'Generation failed' });
   }
-});
+}));
 
 export default router;

@@ -38,6 +38,7 @@ const httpUrlSchema = (max: number) =>
 
 // ── Path params ───────────────────────────────────────────────────────────
 export const idParamSchema = z.object({ id: uuidSchema });
+export const projectIdParamSchema = z.object({ projectId: uuidSchema });
 
 // ── Query ─────────────────────────────────────────────────────────────────
 export const paginationQuerySchema = z.object({

@@ -17,6 +17,7 @@ import { supabase } from '../supabase.js';
 
 const FAL_TRAIN_MODEL = 'fal-ai/flux-lora-fast-training';
 const FAL_QUEUE_BASE = 'https://queue.fal.run';
+const FAL_STATUS_TIMEOUT_MS = 20000;
 
 export interface TrainingStatus {
   status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
@@ -92,6 +93,7 @@ export async function startLoRATraining(
       steps: 500,          // ~3-5 min, good quality
       create_masks: true,  // segmentation masks improve subject-focused training
     }),
+    signal: AbortSignal.timeout(FAL_STATUS_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -116,7 +118,7 @@ export async function getTrainingStatus(jobId: string): Promise<TrainingStatus> 
     // Check status
     const statusRes = await fetch(
       `${FAL_QUEUE_BASE}/${FAL_TRAIN_MODEL}/requests/${jobId}/status`,
-      { headers: { Authorization: `Key ${falKey}` } }
+      { headers: { Authorization: `Key ${falKey}` }, signal: AbortSignal.timeout(FAL_STATUS_TIMEOUT_MS) }
     );
 
     if (!statusRes.ok) {
@@ -133,7 +135,7 @@ export async function getTrainingStatus(jobId: string): Promise<TrainingStatus> 
     // Fetch result when completed
     const resultRes = await fetch(
       `${FAL_QUEUE_BASE}/${FAL_TRAIN_MODEL}/requests/${jobId}`,
-      { headers: { Authorization: `Key ${falKey}` } }
+      { headers: { Authorization: `Key ${falKey}` }, signal: AbortSignal.timeout(FAL_STATUS_TIMEOUT_MS) }
     );
 
     if (!resultRes.ok) {
