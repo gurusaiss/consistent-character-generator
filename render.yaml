@@ -30,3 +30,13 @@ services:
       # Leave unset and the app runs on Gemini alone.
       - key: TOGETHER_API_KEY
         sync: false
+      # Optional — enables the Cloudflare Workers AI generator.
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      # Optional — enables fal.ai PuLID/LoRA generation, face-swap, and
+      # upscaling. Requires a paid fal.ai balance; app degrades gracefully
+      # if unset.
+      - key: FAL_KEY
+        sync: false

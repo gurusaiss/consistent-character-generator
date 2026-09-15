@@ -299,7 +299,7 @@ router.post('/characters/:id/train', requireAuth, validateParams(idParamSchema),
 }));
 
 // GET /api/characters/:id/lora-status — poll training status
-router.get('/characters/:id/lora-status', requireAuth, async (req, res) => {
+router.get('/characters/:id/lora-status', requireAuth, validateParams(idParamSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsCharacter(req.params.id, userId))) {
     return res.status(404).json({ error: 'Character not found' });
@@ -342,10 +342,10 @@ router.get('/characters/:id/lora-status', requireAuth, async (req, res) => {
     lora_trigger_word: char.lora_trigger_word,
     imageCount,
   });
-});
+}));
 
 // DELETE /api/characters/:id
-router.delete('/characters/:id', requireAuth, async (req, res) => {
+router.delete('/characters/:id', requireAuth, validateParams(idParamSchema), asyncHandler(async (req, res) => {
   const userId = (req as AuthRequest).user.id;
   if (!(await userOwnsCharacter(req.params.id, userId))) {
     return res.status(404).json({ error: 'Character not found' });
@@ -363,8 +363,11 @@ router.delete('/characters/:id', requireAuth, async (req, res) => {
   }
 
   const { error } = await supabase.from('characters').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logger.error('Character delete failed', { characterId: req.params.id, error: error.message });
+    return res.status(500).json({ error: error.message });
+  }
   res.json({ success: true });
-});
+}));
 
 export default router;
