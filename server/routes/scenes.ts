@@ -103,7 +103,7 @@ router.put('/scenes/:id', requireAuth, validateParams(idParamSchema), validate(s
     return res.status(404).json({ error: 'Scene not found' });
   }
 
-  const { prompt, status, generated_image_url, error_message, scene_number } = req.body;
+  const { prompt, status, generated_image_url, error_message, scene_number, story_text } = req.body;
 
   const updates: Record<string, any> = {};
   if (prompt !== undefined) updates.prompt = prompt;
@@ -111,6 +111,7 @@ router.put('/scenes/:id', requireAuth, validateParams(idParamSchema), validate(s
   if (generated_image_url !== undefined) updates.generated_image_url = generated_image_url;
   if (error_message !== undefined) updates.error_message = error_message;
   if (scene_number !== undefined) updates.scene_number = scene_number;
+  if (story_text !== undefined) updates.story_text = story_text;
 
   const { data, error } = await supabase
     .from('scenes')

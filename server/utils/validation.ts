@@ -96,6 +96,13 @@ export const sceneUpdateSchema = z.object({
   generated_image_url: httpUrlSchema(2000).nullish(),
   error_message: optionalText(5000),
   scene_number: z.number().int('scene_number must be an integer').min(1, 'scene_number must be at least 1').max(10_000).optional(),
+  story_text: optionalText(3000),
+});
+
+// ── Story generation ──────────────────────────────────────────────────────
+export const storyGenerateSchema = z.object({
+  premise: z.string('Premise is required').trim().min(1, 'Premise is required').max(2000, 'Premise must be 2000 characters or fewer'),
+  sceneCount: z.coerce.number().int('sceneCount must be an integer').min(2, 'sceneCount must be at least 2').max(20, 'sceneCount must be 20 or fewer').default(6),
 });
 
 // ── Generate ──────────────────────────────────────────────────────────────

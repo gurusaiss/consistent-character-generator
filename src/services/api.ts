@@ -50,6 +50,9 @@ export const api = {
       put(`/api/projects/${id}`, data),
 
     delete: (id: string): Promise<{ success: boolean }> => del(`/api/projects/${id}`),
+
+    generateStory: (id: string, data: { premise: string; sceneCount?: number }): Promise<{ scenes: string[] }> =>
+      post(`/api/projects/${id}/story`, data),
   },
 
   characters: {
@@ -89,7 +92,7 @@ export const api = {
 
     update: (
       id: string,
-      data: { prompt?: string; status?: string; generated_image_url?: string; error_message?: string; scene_number?: number }
+      data: { prompt?: string; status?: string; generated_image_url?: string; error_message?: string; scene_number?: number; story_text?: string }
     ): Promise<Scene> => put(`/api/scenes/${id}`, data),
 
     delete: (id: string): Promise<{ success: boolean }> => del(`/api/scenes/${id}`),

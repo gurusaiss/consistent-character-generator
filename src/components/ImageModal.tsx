@@ -96,6 +96,13 @@ export default function ImageModal({ scene, onClose, projectName }: Props) {
           />
         )}
 
+        {scene.story_text && (
+          <div className="p-4 border-t border-white/5">
+            <p className="text-slate-500 text-xs mb-1 uppercase tracking-wide">Story</p>
+            <p className="text-slate-200 text-sm leading-relaxed">{scene.story_text}</p>
+          </div>
+        )}
+
         <div className="p-4 border-t border-white/5">
           <p className="text-slate-500 text-xs mb-1 uppercase tracking-wide">Prompt</p>
           <p className="text-slate-300 text-sm">{scene.prompt}</p>

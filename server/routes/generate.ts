@@ -12,6 +12,7 @@ import { enhanceScenePrompt } from '../services/promptEnhance.js';
 import { upscaleImage } from '../services/upscaleService.js';
 import { applyFaceSwaps } from '../services/faceSwapService.js';
 import { generateWithGeminiImage } from '../services/geminiImageGenerate.js';
+import { generateSceneCaption } from '../services/storyGenerate.js';
 import { userOwnsProject, userOwnsScene } from '../utils/ownership.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
@@ -329,6 +330,10 @@ router.post('/generate', requireAuth, generateRateLimiter, validate(generateSche
     const characterNames = charData.map(c => c.name).filter(Boolean);
     const enhancedPrompt = await enhanceScenePrompt(ai, prompt, stylePrompt, characterNames);
 
+    // Narrative caption is independent of which image model wins, so kick it
+    // off now and only await it right before persisting the scene.
+    const captionPromise = generateSceneCaption(ai, enhancedPrompt, characterNames);
+
     // If any character has a ready LoRA, use it for a dedicated high-quality generation
     const loraChar = charData.find(c => c.lora_status === 'ready' && c.lora_url && c.lora_trigger_word);
     const loraGenPromise = loraChar
@@ -450,6 +455,9 @@ router.post('/generate', requireAuth, generateRateLimiter, validate(generateSche
       .upload(imagePath, Buffer.from(imageData, 'base64'), { contentType: mimeType, upsert: true });
     if (finalUploadErr) console.warn('Final re-upload failed:', finalUploadErr.message);
 
+    // Narrative caption — never worth failing generation for, so swallow errors
+    const storyText = await captionPromise.catch(() => null);
+
     // Persist scene + consistency + model + enhanced prompt
     if (sceneId) {
       const { error: sceneUpdateErr } = await supabase.from('scenes').update({
@@ -459,6 +467,7 @@ router.post('/generate', requireAuth, generateRateLimiter, validate(generateSche
         consistency_score: consistencyScore,
         model_used: modelUsed,
         enhanced_prompt: enhancedPrompt !== prompt ? enhancedPrompt : null,
+        story_text: storyText,
       }).eq('id', sceneId);
       if (sceneUpdateErr) console.error('Scene update failed:', sceneUpdateErr.message);
     }
@@ -478,6 +487,7 @@ router.post('/generate', requireAuth, generateRateLimiter, validate(generateSche
     res.json({
       imageUrl: publicUrl,
       enhancedPrompt: enhancedPrompt !== prompt ? enhancedPrompt : null,
+      storyText,
       success: true,
       consistencyScore,
       modelUsed,

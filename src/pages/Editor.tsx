@@ -35,6 +35,12 @@ export default function Editor() {
   const [generatingAll, setGeneratingAll] = useState(false);
   const [selectedSceneId, setSelectedSceneId] = useState<string | undefined>();
 
+  // Story generation (premise → scene outline)
+  const [showStoryModal, setShowStoryModal] = useState(false);
+  const [storyPremise, setStoryPremise] = useState('');
+  const [storySceneCount, setStorySceneCount] = useState(6);
+  const [generatingStory, setGeneratingStory] = useState(false);
+
   // Modals
   const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
   const [deleteCharTarget, setDeleteCharTarget] = useState<Character | null>(null);
@@ -240,6 +246,25 @@ export default function Editor() {
     }
   }
 
+  async function handleGenerateStory() {
+    if (!storyPremise.trim()) { toast.error('Describe your story idea first'); return; }
+    setGeneratingStory(true);
+    try {
+      const result = await api.projects.generateStory(projectId!, {
+        premise: storyPremise,
+        sceneCount: storySceneCount,
+      });
+      setStoryText(result.scenes.join('\n'));
+      setShowStoryModal(false);
+      setStoryPremise('');
+      toast.success(`${result.scenes.length} scenes drafted — review below, then Parse & Save`);
+    } catch (err: any) {
+      toast.error('Story generation failed: ' + err.message);
+    } finally {
+      setGeneratingStory(false);
+    }
+  }
+
   function handleParseScenes() {
     const lines = storyText.split('\n').map((l) => l.trim()).filter(Boolean);
     if (lines.length === 0) { toast.error('Write some scene prompts first'); return; }
@@ -287,7 +312,8 @@ export default function Editor() {
           s.id === scene.id
             ? { ...s, status: 'success', generated_image_url: result.imageUrl,
                 consistency_score: result.consistencyScore ?? null,
-                model_used: result.modelUsed ?? null, error_message: '' }
+                model_used: result.modelUsed ?? null, error_message: '',
+                story_text: result.storyText ?? null }
             : s
         )
       );
@@ -515,9 +541,14 @@ export default function Editor() {
         <div className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ backgroundColor: '#07071a' }}>
           <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between shrink-0">
             <h2 className="font-semibold text-slate-200 text-sm">Story Scenes</h2>
-            <button onClick={handleParseScenes} className="btn-secondary text-xs py-1.5 px-3">
-              Parse & Save
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowStoryModal(true)} className="btn-secondary text-xs py-1.5 px-3">
+                ✨ Generate Story
+              </button>
+              <button onClick={handleParseScenes} className="btn-secondary text-xs py-1.5 px-3">
+                Parse & Save
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
             <div>
@@ -600,7 +631,7 @@ export default function Editor() {
               <p className="text-white/50 text-xs uppercase tracking-widest mb-1">
                 Scene {presentScene.scene_number} of {generatedScenes.length}
               </p>
-              <p className="text-white/80 text-sm max-w-2xl mx-auto">{presentScene.prompt}</p>
+              <p className="text-white/80 text-sm max-w-2xl mx-auto">{presentScene.story_text || presentScene.prompt}</p>
             </div>
             <button
               onClick={() => setPresentIndex(i => Math.min(i + 1, generatedScenes.length - 1))}
@@ -676,6 +707,49 @@ export default function Editor() {
               <button onClick={() => setShowCharForm(false)} className="btn-secondary">Cancel</button>
               <button onClick={handleSaveChar} disabled={charSubmitting} className="btn-primary disabled:opacity-50">
                 {charSubmitting ? 'Saving…' : editChar ? 'Save Changes' : 'Add Character'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Generate Story Modal ── */}
+      {showStoryModal && (
+        <Modal title="Generate Story" onClose={() => setShowStoryModal(false)}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-1.5">Story idea</label>
+              <textarea
+                value={storyPremise}
+                onChange={(e) => setStoryPremise(e.target.value)}
+                placeholder="A knight discovers the dragon guarding the village is actually friendly…"
+                className="input-dark resize-none h-24"
+                autoFocus
+              />
+              {characters.length > 0 && (
+                <p className="text-xs text-slate-500 mt-1.5">
+                  Will feature: {characters.map((c) => c.name).join(', ')}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1.5">Number of scenes</label>
+              <input
+                type="number"
+                min={2}
+                max={20}
+                value={storySceneCount}
+                onChange={(e) => setStorySceneCount(Math.min(20, Math.max(2, Number(e.target.value) || 6)))}
+                className="input-dark w-24"
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              AI writes a {storySceneCount}-scene outline into the editor below for you to review and edit before saving.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setShowStoryModal(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleGenerateStory} disabled={generatingStory} className="btn-primary disabled:opacity-50">
+                {generatingStory ? 'Writing…' : 'Generate'}
               </button>
             </div>
           </div>

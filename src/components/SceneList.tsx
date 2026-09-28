@@ -55,6 +55,9 @@ export default function SceneList({ scenes, onDelete, onRetry }: Props) {
                 <p className="text-red-400 text-xs mt-1 line-clamp-1">{scene.error_message}</p>
               )}
               <EnhancedPromptBadge scene={scene} />
+              {scene.story_text && (
+                <p className="text-violet-300/70 text-xs mt-1.5 italic line-clamp-2">"{scene.story_text}"</p>
+              )}
               {scene.status === 'success' && scene.consistency_score != null && (
                 <div className="flex items-center gap-2 mt-1.5">
                   <div className="flex items-center gap-1">

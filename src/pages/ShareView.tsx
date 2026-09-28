@@ -186,7 +186,7 @@ export default function ShareView() {
                   )}
                 </div>
                 <div className="px-3 py-2">
-                  <p className="text-xs text-slate-500 line-clamp-2">{scene.prompt}</p>
+                  <p className="text-xs text-slate-500 line-clamp-2">{scene.story_text || scene.prompt}</p>
                 </div>
               </div>
             ))}

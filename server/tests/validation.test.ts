@@ -9,6 +9,7 @@ import {
   projectUpdateSchema,
   scenesBulkSchema,
   sceneUpdateSchema,
+  storyGenerateSchema,
   uuidSchema,
 } from '../utils/validation.js';
 
@@ -135,6 +136,32 @@ describe('sceneUpdateSchema', () => {
   });
   it('accepts empty string for generated_image_url', () => {
     expect(sceneUpdateSchema.safeParse({ generated_image_url: '' }).success).toBe(true);
+  });
+  it('accepts a story_text caption', () => {
+    expect(sceneUpdateSchema.safeParse({ story_text: 'A short narrative caption.' }).success).toBe(true);
+  });
+  it('rejects story_text over 3000 characters', () => {
+    expect(sceneUpdateSchema.safeParse({ story_text: 'x'.repeat(3001) }).success).toBe(false);
+  });
+});
+
+describe('storyGenerateSchema', () => {
+  it('accepts a premise with default sceneCount', () => {
+    const r = storyGenerateSchema.safeParse({ premise: 'A hero discovers a hidden power' });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.sceneCount).toBe(6);
+  });
+  it('coerces sceneCount from a string', () => {
+    const r = storyGenerateSchema.safeParse({ premise: 'X', sceneCount: '10' });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.sceneCount).toBe(10);
+  });
+  it('rejects empty premise', () => {
+    expect(storyGenerateSchema.safeParse({ premise: '' }).success).toBe(false);
+  });
+  it('rejects sceneCount below 2 or above 20', () => {
+    expect(storyGenerateSchema.safeParse({ premise: 'X', sceneCount: 1 }).success).toBe(false);
+    expect(storyGenerateSchema.safeParse({ premise: 'X', sceneCount: 21 }).success).toBe(false);
   });
 });
 

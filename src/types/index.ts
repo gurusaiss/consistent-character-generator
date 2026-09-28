@@ -41,6 +41,7 @@ export interface Scene {
   consistency_score: number | null;
   model_used: string | null;
   enhanced_prompt: string | null;
+  story_text: string | null;
   created_at: string;
 }
 
@@ -65,6 +66,7 @@ export interface GenerateResponse {
   modelsContested?: number;
   creditsRemaining?: number;
   enhancedPrompt?: string | null;
+  storyText?: string | null;
 }
 
 export const STYLE_PRESETS = [

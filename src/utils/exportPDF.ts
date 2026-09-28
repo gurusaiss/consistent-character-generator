@@ -156,12 +156,12 @@ export async function exportStoryboardPDF(
       accent(doc);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
-      doc.text('DESCRIPTION', textX, 26);
+      doc.text(scene.story_text ? 'STORY' : 'DESCRIPTION', textX, 26);
 
       light(doc);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
-      const lines = doc.splitTextToSize(scene.prompt, textW);
+      const lines = doc.splitTextToSize(scene.story_text || scene.prompt, textW);
       doc.text(lines, textX, 34);
     } else {
       // Comic: image fills top 62%, text below
@@ -183,12 +183,12 @@ export async function exportStoryboardPDF(
       accent(doc);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
-      doc.text('DESCRIPTION', M, ty);
+      doc.text(scene.story_text ? 'STORY' : 'DESCRIPTION', M, ty);
 
       light(doc);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
-      const lines = doc.splitTextToSize(scene.prompt, W - 2 * M);
+      const lines = doc.splitTextToSize(scene.story_text || scene.prompt, W - 2 * M);
       doc.text(lines, M, ty + 7);
     }
 
