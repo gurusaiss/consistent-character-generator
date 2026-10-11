@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 .claude/worktrees/
 .env
+
+# Demo recorder output
+demo-output/
+scripts/record-demo/.video-*/

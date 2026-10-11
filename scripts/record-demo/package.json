@@ -1,0 +1,13 @@
+{
+  "name": "consistentai-demo-recorder",
+  "private": true,
+  "type": "module",
+  "description": "Records a real end-to-end run of the app. Kept separate so the Render build never installs Playwright.",
+  "scripts": {
+    "setup": "npm install && npx playwright install chromium",
+    "record": "node record-demo.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

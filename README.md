@@ -66,6 +66,22 @@ npm start        # Express serves dist/ + API on the same process
 
 Deployed as a single Render Blueprint service (`render.yaml`). CI runs on GitHub Actions (`.github/workflows/ci.yml`): typecheck → test → build on every push.
 
+## Recording a demo video
+
+`scripts/record-demo` drives the live app end to end (sign in, create a project, add a character from a
+photo, AI-written story, generate frames, present mode, gallery) and saves a video. It is a separate
+package so the production build never installs Playwright, and it uses real credits (one per scene).
+
+```bash
+cd scripts/record-demo
+npm run setup            # installs Playwright and Chromium once
+# PowerShell:
+$env:DEMO_EMAIL="you@example.com"; $env:DEMO_PASSWORD="..."; $env:DEMO_PHOTO="C:\path\face.jpg"
+npm run record           # writes demo-output/consistentai-demo.webm (45s minimum)
+```
+
+Set `BASE_URL` to record a local or staging copy, and `DEMO_SCENES` (2-8, default 4) to change length.
+
 ## Project Structure
 
 ```
