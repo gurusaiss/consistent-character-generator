@@ -70,10 +70,10 @@ export interface GenerateResponse {
 }
 
 export const STYLE_PRESETS = [
-  { value: 'cinematic', label: 'Cinematic', emoji: '🎬' },
-  { value: 'anime',     label: 'Anime',     emoji: '✨' },
-  { value: 'comic',     label: 'Comic Book', emoji: '💥' },
-  { value: 'watercolor',label: 'Watercolor', emoji: '🎨' },
-  { value: 'sketch',    label: 'Sketch',    emoji: '✏️' },
-  { value: 'pixel',     label: 'Pixel Art', emoji: '🕹️' },
+  { value: 'cinematic', label: 'Cinematic' },
+  { value: 'anime',     label: 'Anime' },
+  { value: 'comic',     label: 'Comic book' },
+  { value: 'watercolor',label: 'Watercolor' },
+  { value: 'sketch',    label: 'Sketch' },
+  { value: 'pixel',     label: 'Pixel art' },
 ] as const;

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { STYLE_PRESETS } from '../types';
 import type { Scene } from '../types';
 import ImageModal from '../components/ImageModal';
+import { ScoreBadge } from '../components/Badges';
 
 interface SharedProject {
   id: string;
@@ -73,10 +74,12 @@ export default function ShareView() {
 
   if (notFound || !project) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] text-center px-4">
-        <div className="text-5xl mb-4">🔒</div>
-        <h2 className="text-2xl font-bold text-slate-200 mb-2">Storyboard not found</h2>
-        <p className="text-slate-400 mb-6">This storyboard is private or doesn't exist.</p>
+      <div className="flex flex-col items-start justify-center min-h-[80vh] max-w-xl mx-auto px-4">
+        <p className="mono-label mb-4">404 · Not shared</p>
+        <h2 className="font-display text-4xl sm:text-5xl text-slate-100 leading-tight mb-3" style={{ fontWeight: 500 }}>
+          This storyboard is private, or it doesn't exist.
+        </h2>
+        <p className="text-slate-400 mb-8 leading-relaxed">If someone sent you this link, ask them to make the project public.</p>
         <button onClick={() => navigate('/')} className="btn-primary">Go to ConsistentAI</button>
       </div>
     );
@@ -88,53 +91,31 @@ export default function ShareView() {
     : null;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#07071a' }}>
-      {/* Header */}
-      <div className="border-b border-white/5 sticky top-0 z-10 backdrop-blur" style={{ backgroundColor: 'rgba(7,7,26,0.9)' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-          <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors">
-            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center">
-              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-              </svg>
-            </div>
-            <span className="font-bold gradient-text text-sm">ConsistentAI</span>
-          </button>
-          <button onClick={() => navigate('/auth')} className="btn-primary text-sm py-1.5 px-4">
-            Create Your Own →
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="bg-ink">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Project header */}
-        <div className="mb-10">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="pb-8 mb-10 border-b border-white/10">
+          <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
-              <h1 className="text-3xl sm:text-4xl font-bold gradient-text mb-2">{project.name}</h1>
+              <p className="mono-label mb-4">
+                Shared storyboard
+                {styleLabel && ` · ${styleLabel.label}`}
+                {` · ${String(generated.length).padStart(2, '0')} frame${generated.length !== 1 ? 's' : ''}`}
+                {avgScore !== null && ` · ${avgScore}% average match`}
+              </p>
+              <h1 className="font-display text-4xl sm:text-6xl text-slate-100 leading-[1.02]" style={{ fontVariationSettings: "'opsz' 144", fontWeight: 500 }}>
+                {project.name}
+              </h1>
               {project.description && (
-                <p className="text-slate-400 text-sm max-w-xl">{project.description}</p>
+                <p className="text-slate-400 mt-4 max-w-xl leading-relaxed">{project.description}</p>
               )}
-              <div className="flex items-center gap-3 mt-3 flex-wrap">
-                {styleLabel && (
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-violet-600/15 border border-violet-500/20 text-violet-400">
-                    {styleLabel.emoji} {styleLabel.label}
-                  </span>
-                )}
-                <span className="text-xs text-slate-500">{generated.length} scene{generated.length !== 1 ? 's' : ''}</span>
-                {avgScore !== null && (
-                  <span className={`text-xs px-2.5 py-1 rounded-full ${scoreColor(avgScore)}`}>
-                    Avg consistency: {avgScore}%
-                  </span>
-                )}
-              </div>
             </div>
             {generated.length > 0 && (
               <button
                 onClick={() => generated.forEach((s, i) => setTimeout(() => downloadImage(s.generated_image_url, `${project.name}-scene-${s.scene_number}.png`), i * 300))}
                 className="btn-secondary text-sm"
               >
-                Download All
+                Download all
               </button>
             )}
           </div>
@@ -142,63 +123,57 @@ export default function ShareView() {
 
         {/* Storyboard grid */}
         {generated.length === 0 ? (
-          <div className="glass-card p-16 text-center">
-            <p className="text-slate-500">No generated scenes in this storyboard yet.</p>
+          <div className="border border-white/10 p-14">
+            <p className="mono-label mb-3">Empty</p>
+            <p className="font-display text-2xl text-slate-300" style={{ fontWeight: 500 }}>No finished frames in this storyboard yet.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {generated.map((scene) => (
-              <div
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-8">
+            {generated.map((scene, i) => (
+              <article
                 key={scene.id}
-                className="glass-card overflow-hidden group cursor-pointer hover:border-violet-500/30 transition-all duration-200"
+                className="rise group cursor-pointer"
+                style={{ ['--i' as any]: Math.min(i, 8) }}
                 onClick={() => setSelectedScene(scene)}
               >
-                <div className="relative">
-                  <img
-                    src={scene.generated_image_url}
-                    alt={`Scene ${scene.scene_number}`}
-                    className="w-full aspect-video object-cover"
-                  />
-                  {/* Hover overlay */}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setSelectedScene(scene); }}
-                      className="bg-white/20 hover:bg-white/30 backdrop-blur text-white text-xs px-3 py-1.5 rounded-lg"
-                    >
-                      View
-                    </button>
+                <div className="frame overflow-hidden transition-colors duration-200 group-hover:border-white/25">
+                  <div className="relative overflow-hidden">
+                    <img
+                      src={scene.generated_image_url}
+                      alt={`Scene ${scene.scene_number}${scene.prompt ? `: ${scene.prompt}` : ''}`}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full aspect-video object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+                    />
+                    <span className="absolute top-2 left-2 font-mono text-[10px] leading-none px-1.5 py-1 bg-ink/90 text-slate-200">
+                      {String(scene.scene_number).padStart(2, '0')}
+                    </span>
+                    <ScoreBadge score={scene.consistency_score} className="absolute top-2 right-2" />
                     <button
                       onClick={(e) => { e.stopPropagation(); downloadImage(scene.generated_image_url, `${project.name}-scene-${scene.scene_number}.png`); }}
-                      className="bg-violet-600/80 hover:bg-violet-600 text-white text-xs px-3 py-1.5 rounded-lg"
+                      aria-label={`Download scene ${scene.scene_number}`}
+                      className="absolute bottom-0 inset-x-0 py-2 text-xs font-semibold text-violet-500 bg-ink/95 border-t border-white/10 translate-y-full group-hover:translate-y-0 focus-visible:translate-y-0 transition-transform duration-300 ease-out"
                     >
-                      ↓
+                      Download
                     </button>
                   </div>
-                  {/* Scene number */}
-                  <div className="absolute top-2 left-2 bg-black/60 backdrop-blur text-xs font-bold text-white px-2 py-0.5 rounded-full">
-                    {scene.scene_number}
-                  </div>
-                  {/* Consistency badge */}
-                  {scene.consistency_score !== null && (
-                    <div className={`absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full ${scoreColor(scene.consistency_score)}`}>
-                      {scene.consistency_score}%
-                    </div>
-                  )}
                 </div>
-                <div className="px-3 py-2">
-                  <p className="text-xs text-slate-500 line-clamp-2">{scene.story_text || scene.prompt}</p>
-                </div>
-              </div>
+                <p className="text-sm text-slate-300 leading-relaxed mt-3 line-clamp-3">{scene.story_text || scene.prompt}</p>
+              </article>
             ))}
           </div>
         )}
 
         {/* CTA footer */}
-        <div className="mt-16 glass-card p-8 text-center">
-          <h3 className="text-xl font-bold gradient-text mb-2">Create your own AI storyboard</h3>
-          <p className="text-slate-400 text-sm mb-5">30 free generations. No credit card required.</p>
-          <button onClick={() => navigate('/auth')} className="btn-primary text-base px-8 py-3">
-            Get Started Free →
+        <div className="mt-20 border border-white/10 bg-panel p-8 sm:p-12 grid md:grid-cols-[1fr_auto] gap-6 items-end">
+          <div>
+            <p className="mono-label mb-3">30 free generations · no card</p>
+            <h3 className="font-display text-3xl sm:text-4xl text-slate-100 leading-tight" style={{ fontWeight: 500 }}>
+              Make a storyboard of your own<span className="text-violet-600">.</span>
+            </h3>
+          </div>
+          <button onClick={() => navigate('/auth')} className="btn-primary text-base !px-8 !py-3.5 justify-self-start">
+            Get started
           </button>
         </div>
       </div>

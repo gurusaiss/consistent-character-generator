@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import type { Scene } from '../types';
+import { ScoreBadge, ModelBadge } from './Badges';
 
 interface Props {
   scenes: Scene[];
@@ -9,51 +10,33 @@ interface Props {
   onRetry: (scene: Scene) => void;
 }
 
-function scoreColor(score: number | null): string {
-  if (score === null) return '';
-  if (score >= 85) return 'bg-emerald-500/90 text-white';
-  if (score >= 70) return 'bg-yellow-500/90 text-black';
-  if (score >= 55) return 'bg-orange-500/90 text-white';
-  return 'bg-red-500/90 text-white';
-}
-
-function scoreLabel(score: number | null): string {
-  if (score === null) return '';
-  if (score >= 85) return `${score}% ✓`;
-  if (score >= 70) return `${score}%`;
-  return `${score}%`;
-}
+const SPROCKETS: React.CSSProperties = {
+  backgroundImage: 'linear-gradient(90deg, #2a2520 0 8px, transparent 8px 20px)',
+  backgroundSize: '20px 100%',
+  backgroundPosition: '6px 0',
+};
 
 export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRetry }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Horizontal scroll with mouse wheel
+  // Let the wheel scroll the strip sideways, but only when it can actually scroll
   function onWheel(e: React.WheelEvent) {
-    if (scrollRef.current) {
-      e.preventDefault();
-      scrollRef.current.scrollLeft += e.deltaY;
-    }
+    const el = scrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    el.scrollLeft += e.deltaY;
   }
 
   if (scenes.length === 0) return null;
 
   return (
     <div className="relative select-none">
-      {/* Top sprocket holes */}
-      <div className="flex gap-0 h-3 bg-black/60 border-y border-white/10 overflow-hidden" aria-hidden="true">
-        {Array.from({ length: 60 }).map((_, i) => (
-          <div key={i} className="shrink-0 w-6 h-full flex items-center justify-center">
-            <div className="w-2 h-1.5 rounded-sm bg-white/15" />
-          </div>
-        ))}
-      </div>
+      <div className="h-2.5 border-b border-white/10" style={SPROCKETS} aria-hidden="true" />
 
-      {/* Film frames */}
       <div
         ref={scrollRef}
         onWheel={onWheel}
-        className="flex gap-0 overflow-x-auto bg-[#0a0a0a] scrollbar-thin"
-        style={{ scrollbarWidth: 'none' }}
+        className="flex overflow-x-auto bg-ink"
+        style={{ scrollbarWidth: 'thin' }}
       >
         {scenes.map((scene) => {
           const isSelected = scene.id === selectedId;
@@ -65,12 +48,11 @@ export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRe
             <div
               key={scene.id}
               onClick={() => onSelect(scene)}
-              className={`relative shrink-0 w-44 border-r border-white/5 cursor-pointer group transition-all duration-200 ${
-                isSelected ? 'ring-2 ring-inset ring-violet-500' : 'hover:bg-white/5'
+              className={`relative shrink-0 w-44 border-r border-white/10 cursor-pointer group transition-colors duration-200 ${
+                isSelected ? 'bg-white/[0.04]' : 'hover:bg-white/[0.03]'
               }`}
             >
-              {/* Thumbnail area */}
-              <div className="relative w-full" style={{ height: '120px', backgroundColor: '#050510' }}>
+              <div className="relative w-full h-[120px] bg-panel overflow-hidden">
                 {isSuccess ? (
                   <img
                     src={scene.generated_image_url}
@@ -79,68 +61,47 @@ export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRe
                     decoding="async"
                     width={176}
                     height={120}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     draggable={false}
                   />
                 ) : isLoading ? (
                   <div className="w-full h-full flex flex-col items-center justify-center gap-2" role="status">
-                    <svg className="w-5 h-5 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    <span className="text-[10px] text-violet-400 animate-pulse">Generating…</span>
+                    <span className="w-2 h-2 rounded-full bg-violet-600 tally" />
+                    <span className="mono-label">Generating</span>
                   </div>
                 ) : isError ? (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-2">
-                    <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-[10px] text-red-400 text-center line-clamp-2 leading-tight">
-                      {scene.error_message || 'Failed'}
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-3" role="alert">
+                    <span className="mono-label !text-red-400">Failed</span>
+                    <p className="text-[10px] text-red-400/80 text-center line-clamp-2 leading-tight">
+                      {scene.error_message}
                     </p>
                   </div>
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="w-10 h-10 rounded-xl border border-white/5 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white/10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01" />
-                      </svg>
-                    </div>
+                  <div
+                    className="w-full h-full flex items-center justify-center"
+                    style={{ backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 9px, rgba(236,229,216,0.045) 9px 10px)' }}
+                  >
+                    <span className="mono-label !text-slate-600">Not shot</span>
                   </div>
                 )}
 
-                {/* Scene number badge */}
-                <div className="absolute top-1.5 left-1.5 bg-black/70 backdrop-blur text-[10px] font-bold text-white px-1.5 py-0.5 rounded">
-                  {scene.scene_number}
-                </div>
+                <span className="absolute top-1.5 left-1.5 font-mono text-[10px] leading-none px-1.5 py-1 bg-ink/90 text-slate-200">
+                  {String(scene.scene_number).padStart(2, '0')}
+                </span>
 
-                {/* Consistency score badge */}
-                {isSuccess && scene.consistency_score !== null && (
-                  <div className={`absolute top-1.5 right-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded ${scoreColor(scene.consistency_score)}`}>
-                    {scoreLabel(scene.consistency_score)}
+                {isSuccess && (
+                  <div className="absolute bottom-1.5 right-1.5 flex gap-1">
+                    <ModelBadge model={scene.model_used} />
+                    <ScoreBadge score={scene.consistency_score} />
                   </div>
                 )}
 
-                {/* Model badge */}
-                {isSuccess && scene.model_used && (
-                  <div className={`absolute bottom-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                    scene.model_used === 'flux'
-                      ? 'bg-amber-500/85 text-black'
-                      : scene.model_used === 'gemini-retry'
-                        ? 'bg-orange-500/85 text-white'
-                        : 'bg-violet-600/85 text-white'
-                  }`}>
-                    {scene.model_used === 'flux' ? '⚡ FLUX' : '🟣 Gemini'}
-                  </div>
-                )}
-
-                {/* Hover overlay */}
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-black/50 flex items-center justify-center gap-1.5">
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-ink/75 flex items-center justify-center gap-1.5">
                   {isError && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onRetry(scene); }}
                       aria-label={`Retry scene ${scene.scene_number}`}
-                      className="text-[10px] bg-blue-600/80 hover:bg-blue-600 text-white px-2 py-1 rounded transition-colors"
+                      className="text-[11px] bg-violet-600 text-ink font-semibold px-2.5 py-1 hover:bg-violet-500 transition-colors"
                     >
                       Retry
                     </button>
@@ -148,30 +109,28 @@ export default function FilmStrip({ scenes, selectedId, onSelect, onDelete, onRe
                   <button
                     onClick={(e) => { e.stopPropagation(); onDelete(scene); }}
                     aria-label={`Delete scene ${scene.scene_number}`}
-                    className="text-[10px] bg-red-600/80 hover:bg-red-600 text-white px-2 py-1 rounded transition-colors"
+                    className="text-[11px] border border-red-500/60 text-red-400 px-2.5 py-1 hover:bg-red-500/15 transition-colors"
                   >
                     Delete
                   </button>
                 </div>
               </div>
 
-              {/* Caption bar */}
-              <div className="px-2 py-1.5 bg-[#0d0d1a] min-h-[44px]">
+              <div className="px-2.5 py-2 min-h-[44px]">
                 <p className="text-[11px] text-slate-400 line-clamp-2 leading-snug">{scene.prompt}</p>
               </div>
+
+              <span
+                aria-hidden="true"
+                className="absolute inset-x-0 bottom-0 h-0.5 bg-violet-600 origin-left transition-transform duration-300"
+                style={{ transform: isSelected ? 'scaleX(1)' : 'scaleX(0)' }}
+              />
             </div>
           );
         })}
       </div>
 
-      {/* Bottom sprocket holes */}
-      <div className="flex gap-0 h-3 bg-black/60 border-y border-white/10 overflow-hidden" aria-hidden="true">
-        {Array.from({ length: 60 }).map((_, i) => (
-          <div key={i} className="shrink-0 w-6 h-full flex items-center justify-center">
-            <div className="w-2 h-1.5 rounded-sm bg-white/15" />
-          </div>
-        ))}
-      </div>
+      <div className="h-2.5 border-t border-white/10" style={SPROCKETS} aria-hidden="true" />
     </div>
   );
 }

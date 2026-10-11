@@ -37,7 +37,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#07071a' }}>
+    <div className="min-h-screen flex flex-col bg-ink">
       <Navbar />
       <main className="flex-1">
         <Suspense fallback={<RouteSpinner />}>
@@ -57,10 +57,11 @@ function AppRoutes() {
         position="bottom-right"
         toastOptions={{
           style: {
-            background: '#1e1b4b',
-            color: '#e2e8f0',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '12px',
+            background: '#221e1a',
+            color: '#ece5d8',
+            border: '1px solid rgba(236,229,216,0.16)',
+            borderRadius: '4px',
+            fontSize: '14px',
           },
         }}
       />

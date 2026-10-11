@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { Scene } from '../types';
+import { ScoreBadge, ModelBadge } from './Badges';
 
 interface Props {
   scene: Scene | null;
@@ -26,63 +27,52 @@ async function downloadImage(url: string, filename: string) {
 
 export default function ImageModal({ scene, onClose, projectName }: Props) {
   useEffect(() => {
+    if (!scene) return;
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [scene, onClose]);
 
   if (!scene) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
+      className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 bg-black/85"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="image-modal-title"
     >
       <div
-        className="glass-card max-w-4xl w-full max-h-[90vh] overflow-auto"
+        className="modal-pop glass-card max-w-4xl w-full max-h-[92vh] overflow-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-4 border-b border-white/5">
-          <div>
-            {projectName && <p className="text-slate-500 text-xs">{projectName}</p>}
-            <div className="flex items-center gap-2 flex-wrap">
-              <p id="image-modal-title" className="text-slate-200 font-medium">Scene {scene.scene_number}</p>
-              {scene.consistency_score !== null && (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  scene.consistency_score >= 85 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                  scene.consistency_score >= 70 ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
-                  scene.consistency_score >= 55 ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
-                  'bg-red-500/20 text-red-400 border border-red-500/30'
-                }`}>
-                  {scene.consistency_score}% consistent
-                </span>
-              )}
-              {scene.model_used && (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  scene.model_used === 'flux'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    : 'bg-violet-600/20 text-violet-300 border border-violet-500/30'
-                }`}>
-                  {scene.model_used === 'flux' ? '⚡ FLUX' : '🟣 Gemini'}
-                </span>
-              )}
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
+          <div className="min-w-0">
+            {projectName && <p className="mono-label truncate">{projectName}</p>}
+            <div className="flex items-center gap-2 flex-wrap mt-1">
+              <p id="image-modal-title" className="font-display text-xl text-slate-100" style={{ fontWeight: 500 }}>
+                Scene {scene.scene_number}
+              </p>
+              <ScoreBadge score={scene.consistency_score} />
+              <ModelBadge model={scene.model_used} />
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {scene.generated_image_url && (
               <button
                 onClick={() => downloadImage(scene.generated_image_url, `scene-${scene.scene_number}.png`)}
-                className="btn-primary text-sm py-1.5 px-4"
+                className="btn-primary text-sm !py-1.5 !px-4"
               >
                 Download
               </button>
             )}
-            <button onClick={onClose} aria-label="Close image preview" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center text-slate-400">
-              ✕
+            <button
+              onClick={onClose}
+              aria-label="Close image preview"
+              className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-colors"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 3l10 10M13 3L3 13" /></svg>
             </button>
           </div>
         </div>
@@ -97,15 +87,15 @@ export default function ImageModal({ scene, onClose, projectName }: Props) {
         )}
 
         {scene.story_text && (
-          <div className="p-4 border-t border-white/5">
-            <p className="text-slate-500 text-xs mb-1 uppercase tracking-wide">Story</p>
-            <p className="text-slate-200 text-sm leading-relaxed">{scene.story_text}</p>
+          <div className="p-4 sm:p-5 border-t border-white/10">
+            <p className="mono-label mb-2">Story</p>
+            <p className="font-display text-lg text-slate-100 leading-relaxed" style={{ fontWeight: 400 }}>{scene.story_text}</p>
           </div>
         )}
 
-        <div className="p-4 border-t border-white/5">
-          <p className="text-slate-500 text-xs mb-1 uppercase tracking-wide">Prompt</p>
-          <p className="text-slate-300 text-sm">{scene.prompt}</p>
+        <div className="p-4 sm:p-5 border-t border-white/10">
+          <p className="mono-label mb-2">Prompt</p>
+          <p className="text-slate-300 text-sm leading-relaxed">{scene.prompt}</p>
         </div>
       </div>
     </div>

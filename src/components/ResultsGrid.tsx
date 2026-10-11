@@ -1,4 +1,5 @@
 import type { Scene } from '../types';
+import { ScoreBadge, ModelBadge } from './Badges';
 
 interface Props {
   scenes: Scene[];
@@ -38,111 +39,87 @@ export default function ResultsGrid({ scenes, onImageClick }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-start justify-between mb-4 gap-2">
         <div>
-          <h2 className="font-semibold text-slate-200">Results</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {successScenes.length} generated
-            {loadingScenes.length > 0 && `, ${loadingScenes.length} loading`}
-            {pendingScenes.length > 0 && `, ${pendingScenes.length} pending`}
+          <h2 className="mono-label !text-slate-300">Frames</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            {successScenes.length} done
+            {loadingScenes.length > 0 && `, ${loadingScenes.length} in progress`}
+            {pendingScenes.length > 0 && `, ${pendingScenes.length} waiting`}
             {errorScenes.length > 0 && `, ${errorScenes.length} failed`}
           </p>
         </div>
         {successScenes.length > 0 && (
-          <button onClick={handleDownloadAll} className="btn-secondary text-xs py-1.5 px-3">
-            Download All
+          <button onClick={handleDownloadAll} className="text-xs border border-white/15 text-slate-300 hover:border-white/40 px-2.5 py-1.5 transition-colors">
+            Save all
           </button>
         )}
       </div>
 
       {scenes.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
-          <div className="w-14 h-14 rounded-full bg-cyan-600/10 border border-cyan-500/20 flex items-center justify-center mb-3">
-            <svg className="w-6 h-6 text-cyan-500/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <p className="text-slate-500 text-sm">No results yet</p>
-          <p className="text-slate-600 text-xs mt-1">Add scenes and click Generate</p>
+        <div
+          className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-white/15"
+          style={{ backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 11px, rgba(236,229,216,0.03) 11px 12px)' }}
+        >
+          <p className="font-display text-xl text-slate-300" style={{ fontWeight: 500 }}>No frames yet</p>
+          <p className="text-slate-500 text-xs mt-1.5 max-w-[200px] leading-relaxed">Save some scenes, then generate. Finished frames appear here.</p>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           {scenes.map((scene) => (
-            <div key={scene.id} className="glass-card overflow-hidden group">
+            <div key={scene.id} className="frame overflow-hidden group">
               {scene.status === 'success' && scene.generated_image_url ? (
-                <div className="relative">
+                <div className="relative overflow-hidden">
                   <img
                     src={scene.generated_image_url}
                     alt={`Scene ${scene.scene_number}${scene.prompt ? `: ${scene.prompt}` : ''}`}
                     loading="lazy"
                     decoding="async"
-                    className="w-full cursor-pointer hover:opacity-90 transition-opacity"
+                    className="w-full cursor-pointer"
                     onClick={() => onImageClick(scene)}
                   />
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity bg-black/40 flex items-center justify-center gap-2">
+                  <div className="absolute inset-x-0 bottom-0 flex translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0 transition-transform duration-300 ease-out bg-ink/95 border-t border-white/10">
                     <button
                       onClick={() => onImageClick(scene)}
                       aria-label={`View scene ${scene.scene_number} full size`}
-                      className="bg-white/20 hover:bg-white/30 backdrop-blur text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+                      className="flex-1 py-2 text-xs font-semibold text-violet-500 hover:bg-white/5 transition-colors"
                     >
                       View
                     </button>
                     <button
                       onClick={() => downloadImage(scene.generated_image_url, `scene-${scene.scene_number}.png`)}
                       aria-label={`Download scene ${scene.scene_number}`}
-                      className="bg-violet-600/80 hover:bg-violet-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
+                      className="flex-1 py-2 text-xs text-slate-300 hover:bg-white/5 border-l border-white/10 transition-colors"
                     >
                       Download
                     </button>
                   </div>
-                  <div className="absolute top-2 left-2 flex items-center gap-1.5">
-                    <span className="bg-black/50 backdrop-blur text-xs text-white px-2 py-0.5 rounded-full">
-                      Scene {scene.scene_number}
-                    </span>
-                    {scene.model_used && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur ${
-                        scene.model_used === 'flux'
-                          ? 'bg-amber-500/85 text-black'
-                          : 'bg-violet-600/85 text-white'
-                      }`}>
-                        {scene.model_used === 'flux' ? '⚡ FLUX' : '🟣 Gemini'}
-                      </span>
-                    )}
+                  <span className="absolute top-2 left-2 font-mono text-[10px] leading-none px-1.5 py-1 bg-ink/90 text-slate-200">
+                    {String(scene.scene_number).padStart(2, '0')}
+                  </span>
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <ModelBadge model={scene.model_used} />
+                    <ScoreBadge score={scene.consistency_score} />
                   </div>
-                  {scene.consistency_score !== null && (
-                    <div className={`absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      (scene.consistency_score ?? 0) >= 85 ? 'bg-emerald-500/90 text-white' :
-                      (scene.consistency_score ?? 0) >= 70 ? 'bg-yellow-500/90 text-black' :
-                      (scene.consistency_score ?? 0) >= 55 ? 'bg-orange-500/90 text-white' :
-                      'bg-red-500/90 text-white'
-                    }`}>
-                      {scene.consistency_score}%
-                    </div>
-                  )}
                 </div>
               ) : scene.status === 'loading' ? (
                 <div className="h-40 flex flex-col items-center justify-center gap-2" role="status">
-                  <svg className="w-6 h-6 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  <p className="text-slate-500 text-xs">Generating scene {scene.scene_number}…</p>
+                  <span className="w-2 h-2 rounded-full bg-violet-600 tally" />
+                  <p className="mono-label">Generating scene {scene.scene_number}</p>
                 </div>
               ) : scene.status === 'error' ? (
-                <div className="h-28 flex flex-col items-center justify-center gap-2 px-4" role="alert">
-                  <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="text-red-400 text-xs text-center">Scene {scene.scene_number}: {scene.error_message || 'Failed'}</p>
+                <div className="h-28 flex flex-col items-center justify-center gap-1.5 px-4 text-center" role="alert">
+                  <p className="mono-label !text-red-400">Scene {scene.scene_number} failed</p>
+                  <p className="text-red-400/80 text-xs line-clamp-2">{scene.error_message}</p>
                 </div>
               ) : (
-                <div className="h-24 flex items-center justify-center">
-                  <span className="text-slate-600 text-xs">Scene {scene.scene_number} — pending</span>
+                <div className="h-20 flex items-center justify-center">
+                  <span className="mono-label !text-slate-600">Scene {scene.scene_number} · waiting</span>
                 </div>
               )}
               {scene.status === 'success' && scene.generated_image_url && (
-                <div className="px-3 py-2 border-t border-white/5">
-                  <p className="text-slate-500 text-xs line-clamp-1">{scene.prompt}</p>
+                <div className="px-3 py-2 border-t border-white/10">
+                  <p className="text-slate-400 text-xs line-clamp-2 leading-snug">{scene.story_text || scene.prompt}</p>
                 </div>
               )}
             </div>

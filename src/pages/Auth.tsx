@@ -46,33 +46,52 @@ export default function Auth() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center px-4 animated-bg">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-500/40">
-            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold gradient-text">ConsistentAI</h1>
-          <p className="text-slate-500 text-sm mt-1">AI-powered storyboard generator</p>
+    <div className="min-h-[calc(100vh-56px)] grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      {/* Editorial side */}
+      <aside className="hidden lg:flex flex-col justify-between border-r border-white/10 bg-panel p-12 xl:p-16">
+        <p className="mono-label flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-violet-600 tally" />
+          Scene 01 · Take 01
+        </p>
+        <div>
+          <h2 className="font-display text-5xl xl:text-6xl leading-[1.02] text-slate-100" style={{ fontVariationSettings: "'opsz' 144", fontWeight: 500 }}>
+            Cast it once.<br />Keep it the same<span className="text-violet-600">.</span>
+          </h2>
+          <p className="text-slate-400 mt-6 max-w-sm leading-relaxed">
+            One reference photo becomes a written spec your whole storyboard shares.
+            Thirty free generations, no card.
+          </p>
         </div>
+        <p className="mono-label !text-slate-600">ConsistentAI</p>
+      </aside>
 
-        <div className="glass-card p-8">
+      {/* Form side */}
+      <div className="flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-sm">
+          <h1 className="font-display text-3xl text-slate-100 mb-1" style={{ fontWeight: 500 }}>
+            {mode === 'login' ? 'Welcome back' : 'Start your studio'}
+          </h1>
+          <p className="text-slate-500 text-sm mb-8">
+            {mode === 'login' ? 'Sign in to pick up where you left off.' : 'Create an account to make your first storyboard.'}
+          </p>
+
           {/* Tabs */}
-          <div className="flex gap-1 p-1 bg-white/5 rounded-xl mb-6">
+          <div role="tablist" className="flex border-b border-white/10 mb-7">
             {(['login', 'register'] as Mode[]).map((m) => (
               <button
                 key={m}
+                role="tab"
+                aria-selected={mode === m}
                 onClick={() => setMode(m)}
-                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all capitalize ${
-                  mode === m
-                    ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/30'
-                    : 'text-slate-400 hover:text-slate-200'
+                className={`relative px-1 pb-3 mr-6 text-sm font-medium transition-colors ${
+                  mode === m ? 'text-slate-100' : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
-                {m === 'login' ? 'Sign In' : 'Sign Up'}
+                {m === 'login' ? 'Sign in' : 'Sign up'}
+                <span
+                  className="absolute left-0 right-0 -bottom-px h-0.5 bg-violet-600 origin-left transition-transform duration-300"
+                  style={{ transform: mode === m ? 'scaleX(1)' : 'scaleX(0)' }}
+                />
               </button>
             ))}
           </div>
@@ -81,7 +100,7 @@ export default function Auth() {
           <button
             onClick={handleGoogle}
             disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 text-sm font-medium transition-all mb-4 disabled:opacity-50"
+            className="btn-secondary w-full !py-2.5 text-sm mb-4 disabled:opacity-50"
           >
             {googleLoading ? (
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -142,8 +161,8 @@ export default function Auth() {
           </form>
 
           {mode === 'register' && (
-            <p className="text-slate-600 text-xs text-center mt-4">
-              By signing up you agree to our terms of service.
+            <p className="text-slate-600 text-xs mt-4">
+              We'll email a confirmation link before you can sign in.
             </p>
           )}
         </div>

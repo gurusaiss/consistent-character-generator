@@ -15,68 +15,71 @@ export default function ProjectCard({ project, onEdit, onDelete }: Props) {
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+  const open = () => navigate(`/editor/${project.id}`);
+
   return (
-    <div
-      className="glass-card group relative overflow-hidden cursor-pointer hover:border-violet-500/30 transition-all duration-300 hover:-translate-y-1"
-      onClick={() => navigate(`/editor/${project.id}`)}
+    <article
+      className="frame group cursor-pointer overflow-hidden transition-colors duration-300 hover:border-white/25"
+      onClick={open}
     >
       {/* Thumbnail */}
-      <div className="h-44 overflow-hidden" style={{ borderRadius: '1rem 1rem 0 0' }}>
+      <div className="relative aspect-video overflow-hidden bg-ink">
         {project.thumbnail_url ? (
           <img
             src={project.thumbnail_url}
             alt={`Thumbnail for storyboard "${project.name}"`}
             loading="lazy"
             decoding="async"
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-violet-900/40 to-cyan-900/20 flex items-center justify-center">
-            <svg className="w-12 h-12 text-violet-500/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+          <div
+            className="w-full h-full flex items-center justify-center"
+            style={{
+              backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 9px, rgba(236,229,216,0.05) 9px 10px)',
+            }}
+          >
+            <span className="mono-label !text-slate-600">No frames yet</span>
           </div>
         )}
+
+        {/* Action bar slides up on hover / keyboard focus */}
+        <div className="absolute inset-x-0 bottom-0 flex translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0 transition-transform duration-300 ease-out bg-ink/95 border-t border-white/10">
+          <button
+            onClick={(e) => { e.stopPropagation(); open(); }}
+            aria-label={`Open ${project.name}`}
+            className="flex-1 py-2.5 text-sm font-semibold text-violet-500 hover:bg-white/5 transition-colors"
+          >
+            Open
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(project); }}
+            aria-label={`Edit ${project.name}`}
+            className="flex-1 py-2.5 text-sm text-slate-300 hover:bg-white/5 border-l border-white/10 transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(project); }}
+            aria-label={`Delete ${project.name}`}
+            className="flex-1 py-2.5 text-sm text-red-400 hover:bg-red-500/10 border-l border-white/10 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
       </div>
 
-      {/* Content */}
+      {/* Meta */}
       <div className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-slate-100 truncate">{project.name}</h3>
-          <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-violet-600/20 text-violet-400 border border-violet-500/20">
-            {project.scene_count} scenes
-          </span>
-        </div>
+        <h3 className="font-display text-xl text-slate-100 truncate" style={{ fontWeight: 500 }}>{project.name}</h3>
         {project.description && (
           <p className="text-slate-400 text-sm mt-1 line-clamp-2">{project.description}</p>
         )}
-        <p className="text-slate-600 text-xs mt-2">{formatDate(project.created_at)}</p>
+        <div className="flex items-center justify-between mt-3 mono-label">
+          <span>{String(project.scene_count).padStart(2, '0')} {project.scene_count === 1 ? 'frame' : 'frames'}</span>
+          <span>{formatDate(project.created_at)}</span>
+        </div>
       </div>
-
-      {/* Hover actions */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-5 gap-2">
-        <button
-          onClick={(e) => { e.stopPropagation(); navigate(`/editor/${project.id}`); }}
-          aria-label={`Open ${project.name}`}
-          className="btn-primary text-sm py-2 px-4"
-        >
-          Open
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onEdit(project); }}
-          aria-label={`Edit ${project.name}`}
-          className="btn-secondary text-sm py-2 px-4"
-        >
-          Edit
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(project); }}
-          aria-label={`Delete ${project.name}`}
-          className="btn-danger text-sm py-1.5 px-3"
-        >
-          Delete
-        </button>
-      </div>
-    </div>
+    </article>
   );
 }

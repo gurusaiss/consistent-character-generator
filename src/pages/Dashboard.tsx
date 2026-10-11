@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { api } from '../services/api';
 import type { Project } from '../types';
 import ProjectCard from '../components/ProjectCard';
+import Modal from '../components/Modal';
 
 interface ProjectFormData {
   name: string;
@@ -51,7 +52,7 @@ export default function Dashboard() {
       setProjects((prev) => [project, ...prev]);
       setShowCreateModal(false);
       setFormData({ name: '', description: '' });
-      toast.success('Project created!');
+      toast.success('Project created');
       navigate(`/editor/${project.id}`);
     } catch (err: any) {
       toast.error('Failed to create project: ' + err.message);
@@ -67,7 +68,7 @@ export default function Dashboard() {
       const updated = await api.projects.update(editProject.id, formData);
       setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       setEditProject(null);
-      toast.success('Project updated!');
+      toast.success('Project updated');
     } catch (err: any) {
       toast.error('Failed to update project: ' + err.message);
     } finally {
@@ -99,85 +100,96 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 pb-6 mb-8 border-b border-white/10">
         <div>
-          <h1 className="text-3xl font-bold gradient-text">My Storyboards</h1>
-          <p className="text-slate-400 mt-1">{projects.length} project{projects.length !== 1 ? 's' : ''}</p>
+          <p className="mono-label mb-3">Projects · {String(projects.length).padStart(2, '0')}</p>
+          <h1 className="font-display text-4xl sm:text-5xl text-slate-100 leading-none" style={{ fontVariationSettings: "'opsz' 96", fontWeight: 500 }}>
+            Your storyboards
+          </h1>
         </div>
-        <button
-          onClick={() => { setFormData({ name: '', description: '' }); setShowCreateModal(true); }}
-          className="btn-primary"
-        >
-          + New Project
-        </button>
+        <div className="flex items-center gap-3">
+          {projects.length > 0 && (
+            <input
+              type="search"
+              placeholder="Search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search projects by name or description"
+              className="input-dark !w-44 sm:!w-56 !py-2 text-sm"
+            />
+          )}
+          <button
+            onClick={() => { setFormData({ name: '', description: '' }); setShowCreateModal(true); }}
+            className="btn-primary whitespace-nowrap"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v10M3 8h10" /></svg>
+            New project
+          </button>
+        </div>
       </div>
-
-      {/* Search */}
-      {projects.length > 0 && (
-        <div className="mb-6">
-          <input
-            type="text"
-            placeholder="Search projects…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search projects by name or description"
-            className="input-dark max-w-sm"
-          />
-        </div>
-      )}
 
       {/* Content */}
       {loading ? (
-        <div className="flex items-center justify-center py-24" role="status" aria-label="Loading projects">
-          <svg className="w-8 h-8 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" role="status" aria-label="Loading projects">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="frame overflow-hidden" aria-hidden="true">
+              <div className="aspect-video bg-white/[0.04] animate-pulse" />
+              <div className="p-4 space-y-2.5">
+                <div className="h-5 w-2/3 bg-white/[0.06] animate-pulse" />
+                <div className="h-3 w-1/3 bg-white/[0.04] animate-pulse" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : loadError ? (
-        <div className="text-center py-24 glass-card" role="alert">
-          <div className="w-20 h-20 rounded-2xl bg-red-600/10 border border-red-500/20 flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-red-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-slate-200 mb-2">Couldn't load your projects</h3>
+        <div className="py-20 px-6 border border-red-500/30 bg-red-500/[0.04]" role="alert">
+          <p className="mono-label !text-red-400 mb-3">Could not load</p>
+          <h3 className="font-display text-3xl text-slate-100 mb-2" style={{ fontWeight: 500 }}>Your projects didn't come through.</h3>
           <p className="text-slate-500 mb-6 font-mono text-sm">{loadError}</p>
-          <button onClick={loadProjects} className="btn-primary">Try Again</button>
+          <button onClick={loadProjects} className="btn-primary">Try again</button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-24 glass-card">
-          <div className="w-20 h-20 rounded-2xl bg-violet-600/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-violet-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
+        <div className="grid md:grid-cols-[1.1fr_1fr] border border-white/10">
+          <div className="p-8 sm:p-12">
+            <p className="mono-label mb-4">{search ? 'No match' : 'Empty reel'}</p>
+            <h3 className="font-display text-3xl sm:text-4xl text-slate-100 leading-tight" style={{ fontWeight: 500 }}>
+              {search ? 'Nothing matches that search.' : 'Nothing shot yet.'}
+            </h3>
+            <p className="text-slate-400 mt-3 max-w-md leading-relaxed">
+              {search
+                ? 'Try a different word, or clear the search box.'
+                : 'Start a project, add a character from a reference photo, then write the scenes. You can also let the story generator draft them from one sentence.'}
+            </p>
+            {!search && (
+              <button
+                onClick={() => { setFormData({ name: '', description: '' }); setShowCreateModal(true); }}
+                className="btn-primary mt-7"
+              >
+                Start the first project
+              </button>
+            )}
           </div>
-          <h3 className="text-xl font-semibold text-slate-200 mb-2">
-            {search ? 'No projects match your search' : 'No projects yet'}
-          </h3>
-          <p className="text-slate-500 mb-6">
-            {search ? 'Try a different search term' : 'Create your first storyboard project to get started'}
-          </p>
-          {!search && (
-            <button
-              onClick={() => { setFormData({ name: '', description: '' }); setShowCreateModal(true); }}
-              className="btn-primary"
-            >
-              Create First Project
-            </button>
-          )}
+          <ol className="hidden md:block border-l border-white/10 divide-y divide-white/10 bg-panel">
+            {['Add a character and a reference photo', 'Write scenes, or generate them from a premise', 'Generate, then export or share'].map((step, i) => (
+              <li key={step} className="flex items-center gap-4 px-8 py-7">
+                <span className="font-mono text-sm text-violet-500">{String(i + 1).padStart(2, '0')}</span>
+                <span className="text-slate-300">{step}</span>
+              </li>
+            ))}
+          </ol>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filtered.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              onEdit={openEditModal}
-              onDelete={setDeleteTarget}
-            />
+          {filtered.map((project, i) => (
+            <div key={project.id} className="rise" style={{ ['--i' as any]: Math.min(i, 8) }}>
+              <ProjectCard
+                project={project}
+                onEdit={openEditModal}
+                onDelete={setDeleteTarget}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -223,33 +235,6 @@ export default function Dashboard() {
           </div>
         </Modal>
       )}
-    </div>
-  );
-}
-
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <div className="glass-card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-white/5">
-          <h3 className="font-semibold text-slate-200">{title}</h3>
-          <button onClick={onClose} aria-label={`Close ${title} dialog`} className="text-slate-500 hover:text-slate-200 transition-colors">✕</button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
     </div>
   );
 }

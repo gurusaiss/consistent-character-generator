@@ -8,24 +8,25 @@ function ConfigError() {
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: '#07071a', color: '#e2e8f0', fontFamily: 'system-ui, sans-serif', padding: '24px',
+      backgroundColor: '#12100e', color: '#ece5d8', fontFamily: '"Hanken Grotesk", system-ui, sans-serif', padding: '24px',
     }}>
       <div style={{
-        maxWidth: '520px', background: '#0f0f2e', border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '16px', padding: '32px',
+        maxWidth: '520px', background: '#1a1714', border: '1px solid rgba(236,229,216,0.1)',
+        borderRadius: '6px', padding: '32px',
       }}>
-        <div style={{ fontSize: '40px', marginBottom: '12px' }}>⚙️</div>
-        <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '12px' }}>Configuration Required</h1>
-        <p style={{ color: '#94a3b8', fontSize: '15px', lineHeight: 1.6, marginBottom: '16px' }}>
-          ConsistentAI can't connect to its backend. The following environment
-          variables are missing or invalid:
+        <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#ff5a2c', marginBottom: '14px' }}>
+          Setup needed
         </p>
-        <ul style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: 2, marginBottom: '16px', paddingLeft: '20px' }}>
-          <li><code style={{ color: '#a5b4fc' }}>VITE_SUPABASE_URL</code></li>
-          <li><code style={{ color: '#a5b4fc' }}>VITE_SUPABASE_ANON_KEY</code></li>
+        <h1 style={{ fontFamily: 'Fraunces, Georgia, serif', fontSize: '28px', fontWeight: 500, marginBottom: '12px' }}>Missing configuration</h1>
+        <p style={{ color: '#a39a8c', fontSize: '15px', lineHeight: 1.6, marginBottom: '16px' }}>
+          ConsistentAI can't reach its backend. These environment variables are missing or invalid:
+        </p>
+        <ul style={{ color: '#c4bbab', fontSize: '14px', lineHeight: 2, marginBottom: '16px', paddingLeft: '20px' }}>
+          <li><code style={{ color: '#ff8a66' }}>VITE_SUPABASE_URL</code></li>
+          <li><code style={{ color: '#ff8a66' }}>VITE_SUPABASE_ANON_KEY</code></li>
         </ul>
-        <p style={{ color: '#64748b', fontSize: '13px', lineHeight: 1.6 }}>
-          Copy <code style={{ color: '#a5b4fc' }}>.env.example</code> to <code style={{ color: '#a5b4fc' }}>.env</code>,
+        <p style={{ color: '#867d71', fontSize: '13px', lineHeight: 1.6 }}>
+          Copy <code style={{ color: '#ff8a66' }}>.env.example</code> to <code style={{ color: '#ff8a66' }}>.env</code>,
           fill in your Supabase project credentials, and restart the dev server.
         </p>
       </div>

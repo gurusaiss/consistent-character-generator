@@ -11,6 +11,8 @@ import FilmStrip from '../components/FilmStrip';
 import SceneList from '../components/SceneList';
 import ResultsGrid from '../components/ResultsGrid';
 import ImageModal from '../components/ImageModal';
+import Modal from '../components/Modal';
+import { modelLabel } from '../utils/models';
 
 export default function Editor() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -34,6 +36,9 @@ export default function Editor() {
   const [storyText, setStoryText] = useState('');
   const [generatingAll, setGeneratingAll] = useState(false);
   const [selectedSceneId, setSelectedSceneId] = useState<string | undefined>();
+
+  // Which panel is visible below the lg breakpoint
+  const [mobilePanel, setMobilePanel] = useState<'cast' | 'script' | 'frames'>('script');
 
   // Story generation (premise → scene outline)
   const [showStoryModal, setShowStoryModal] = useState(false);
@@ -98,7 +103,7 @@ export default function Editor() {
     try {
       const updated = await api.projects.update(project.id, { style_preset: style });
       setProject(updated);
-      toast.success('Style updated!');
+      toast.success('Style updated');
     } catch (err: any) {
       toast.error('Failed to update style: ' + err.message);
     }
@@ -125,7 +130,7 @@ export default function Editor() {
   function copyShareLink() {
     if (!project) return;
     const url = `${window.location.origin}/share/${project.id}`;
-    navigator.clipboard.writeText(url).then(() => toast.success('Share link copied!')).catch(() => toast.error('Copy failed'));
+    navigator.clipboard.writeText(url).then(() => toast.success('Share link copied')).catch(() => toast.error('Copy failed'));
   }
 
   // ---- ZIP download ----
@@ -151,7 +156,7 @@ export default function Editor() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.dismiss(tid);
-      toast.success('Downloaded!');
+      toast.success('Downloaded');
     } catch (err: any) {
       toast.dismiss(tid);
       toast.error('Download failed: ' + err.message);
@@ -205,12 +210,12 @@ export default function Editor() {
         const updated = await api.characters.update(editChar.id, payload);
         setCharacters((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
         if (tid) toast.dismiss(tid);
-        toast.success(updated.visual_dna ? 'Character updated with DNA profile!' : 'Character updated!');
+        toast.success(updated.visual_dna ? 'Character updated with DNA profile' : 'Character updated!');
       } else {
         const created = await api.characters.create(projectId!, payload);
         setCharacters((prev) => [...prev, created]);
         if (tid) toast.dismiss(tid);
-        toast.success(created.visual_dna ? 'Character added with DNA profile!' : 'Character added!');
+        toast.success(created.visual_dna ? 'Character added with DNA profile' : 'Character added!');
       }
       setShowCharForm(false);
     } catch (err: any) {
@@ -240,7 +245,7 @@ export default function Editor() {
     try {
       const created = await api.scenes.bulkCreate(projectId!, lines.map((l) => ({ prompt: l })));
       setScenes(created);
-      toast.success(`${created.length} scene${created.length !== 1 ? 's' : ''} saved!`);
+      toast.success(`${created.length} scene${created.length !== 1 ? 's' : ''} saved`);
     } catch (err: any) {
       toast.error('Failed to save scenes: ' + err.message);
     }
@@ -257,7 +262,7 @@ export default function Editor() {
       setStoryText(result.scenes.join('\n'));
       setShowStoryModal(false);
       setStoryPremise('');
-      toast.success(`${result.scenes.length} scenes drafted — review below, then Parse & Save`);
+      toast.success(`${result.scenes.length} scenes drafted — review them, then press Save scenes`);
     } catch (err: any) {
       toast.error('Story generation failed: ' + err.message);
     } finally {
@@ -336,7 +341,7 @@ export default function Editor() {
     toast.success(`Generating ${pending.length} scene${pending.length !== 1 ? 's' : ''}…`);
     for (const scene of pending) await generateScene(scene);
     setGeneratingAll(false);
-    toast.success('All scenes generated!');
+    toast.success('All scenes generated');
   }
 
   async function handleRetryFailed() {
@@ -357,7 +362,7 @@ export default function Editor() {
     try {
       await exportStoryboardPDF(project, characters, scenes, pdfFormat);
       setShowPdfModal(false);
-      toast.success('PDF exported!');
+      toast.success('PDF exported');
     } catch (err: any) {
       toast.error('Export failed: ' + err.message);
     } finally {
@@ -380,9 +385,12 @@ export default function Editor() {
   const failedCount = scenes.filter(s => s.status === 'error').length;
   const pendingCount = scenes.filter(s => s.status === 'pending').length;
   const generatedScenes = scenes.filter(s => s.generated_image_url);
-  const geminiWins = scenes.filter(s => s.model_used === 'gemini' || s.model_used === 'gemini-retry').length;
-  const fluxWins = scenes.filter(s => s.model_used === 'flux').length;
-  const fluxAvailable = fluxWins > 0 || geminiWins > 0; // inferred from data
+  const wins = scenes.reduce<Record<string, number>>((acc, s) => {
+    const label = modelLabel(s.model_used);
+    if (label) acc[label] = (acc[label] || 0) + 1;
+    return acc;
+  }, {});
+  const winEntries = Object.entries(wins).sort((a, b) => b[1] - a[1]);
   const presentScene = generatedScenes[Math.min(presentIndex, generatedScenes.length - 1)];
 
   const avgConsistency = (() => {
@@ -392,76 +400,72 @@ export default function Editor() {
   })();
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)]">
+    <div className="flex flex-col h-[calc(100vh-56px)]">
 
       {/* ── Top bar ── */}
-      <div className="border-b border-white/5 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap shrink-0"
-        style={{ backgroundColor: 'rgba(15,15,42,0.95)' }}>
+      <div className="border-b border-white/10 bg-panel px-4 sm:px-6 py-2.5 flex items-center justify-between gap-x-4 gap-y-2 flex-wrap shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => navigate('/dashboard')} className="text-slate-500 hover:text-slate-300 transition-colors text-sm shrink-0">
-            ← Dashboard
+          <button onClick={() => navigate('/dashboard')} className="text-slate-500 hover:text-slate-100 transition-colors text-sm shrink-0 link-underline">
+            Projects
           </button>
-          <span className="text-slate-700">/</span>
-          <h1 className="font-semibold text-slate-200 truncate">{project?.name}</h1>
+          <span className="text-slate-700" aria-hidden="true">/</span>
+          <h1 className="font-display text-lg text-slate-100 truncate" style={{ fontWeight: 500 }}>{project?.name}</h1>
           {avgConsistency !== null && (
-            <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${
-              avgConsistency >= 85 ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' :
-              avgConsistency >= 70 ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25' :
-              'bg-orange-500/15 text-orange-400 border-orange-500/25'
-            }`}>
-              ~{avgConsistency}% consistent
+            <span
+              title="Average consistency score across scored scenes"
+              className={`mono-label shrink-0 px-2 py-1 border ${
+                avgConsistency >= 85 ? '!text-emerald-400 border-emerald-500/40' :
+                avgConsistency >= 70 ? '!text-yellow-400 border-yellow-500/40' :
+                '!text-orange-400 border-orange-500/40'
+              }`}
+            >
+              {avgConsistency}% match
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:w-full max-sm:pb-1 [&>*]:shrink-0">
           {/* Style selector */}
           <select
             value={project?.style_preset || 'cinematic'}
             onChange={(e) => handleStyleChange(e.target.value)}
-            className="text-xs bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-slate-300 focus:outline-none focus:border-violet-500/60"
+            aria-label="Art style"
+            className="text-xs bg-ink border border-white/15 rounded-md px-2 py-1.5 text-slate-300 focus:outline-none focus:border-violet-600 cursor-pointer"
           >
-            {STYLE_PRESETS.map(({ value, label, emoji }) => (
-              <option key={value} value={value}>{emoji} {label}</option>
+            {STYLE_PRESETS.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
             ))}
           </select>
 
           {/* Share toggle */}
           <button
             onClick={handleTogglePublic}
-            title={project?.is_public ? 'Make private' : 'Make public & get share link'}
-            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all ${
-              project?.is_public
-                ? 'bg-emerald-600/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-600/25'
-                : 'bg-white/5 border-white/10 text-slate-400 hover:border-white/20'
-            }`}
+            title={project?.is_public ? 'Make private' : 'Make public and copy the share link'}
+            className="text-xs px-2.5 py-1.5 rounded-md border border-white/15 text-slate-300 hover:border-white/40 transition-colors flex items-center gap-2"
           >
-            {project?.is_public ? '🌐 Public' : '🔒 Private'}
+            <span className={`w-1.5 h-1.5 rounded-full ${project?.is_public ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+            {project?.is_public ? 'Public' : 'Private'}
           </button>
 
           {project?.is_public && (
-            <button onClick={copyShareLink} className="text-xs px-2.5 py-1.5 rounded-lg bg-violet-600/15 border border-violet-500/25 text-violet-400 hover:bg-violet-600/25 transition-all">
-              Copy Link
-            </button>
-          )}
-
-          {/* Presentation mode */}
-          {generatedCount > 0 && (
-            <button
-              onClick={() => { setPresentIndex(0); setPresentMode(true); }}
-              className="text-xs px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:border-white/25 transition-all"
-              title="Fullscreen presentation"
-            >
-              ▶ Present
+            <button onClick={copyShareLink} className="text-xs px-2.5 py-1.5 rounded-md border border-violet-600/50 text-violet-400 hover:bg-violet-600/10 transition-colors">
+              Copy link
             </button>
           )}
 
           {generatedCount > 0 && (
             <>
-              <button onClick={handleDownloadZip} className="btn-secondary text-sm py-1.5">
-                ↓ ZIP
+              <button
+                onClick={() => { setPresentIndex(0); setPresentMode(true); }}
+                className="text-xs px-2.5 py-1.5 rounded-md border border-white/15 text-slate-300 hover:border-white/40 transition-colors"
+                title="Full-screen walkthrough"
+              >
+                Present
               </button>
-              <button onClick={() => setShowPdfModal(true)} className="btn-secondary text-sm py-1.5">
+              <button onClick={handleDownloadZip} className="text-xs px-2.5 py-1.5 rounded-md border border-white/15 text-slate-300 hover:border-white/40 transition-colors">
+                ZIP
+              </button>
+              <button onClick={() => setShowPdfModal(true)} className="text-xs px-2.5 py-1.5 rounded-md border border-white/15 text-slate-300 hover:border-white/40 transition-colors">
                 PDF
               </button>
             </>
@@ -469,28 +473,29 @@ export default function Editor() {
 
           {failedCount > 0 && !generatingAll && (
             <button onClick={handleRetryFailed}
-              className="text-sm py-1.5 px-3 rounded-lg bg-red-600/15 border border-red-500/30 text-red-400 hover:bg-red-600/25 transition-all">
-              Retry {failedCount}
+              className="text-xs py-1.5 px-2.5 rounded-md border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors">
+              Retry {failedCount} failed
             </button>
           )}
 
-          <span className="text-slate-600 text-xs hidden md:block">
-            {characters.length}c · {scenes.length}s{pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
+          <span className="mono-label hidden xl:block px-1">
+            {characters.length} cast · {scenes.length} scenes{pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
           </span>
 
           <button
             onClick={handleGenerateAll}
             disabled={generatingAll || scenes.length === 0}
-            className="btn-primary text-sm py-2 disabled:opacity-40"
+            className="btn-primary text-sm !py-1.5 !px-4 disabled:opacity-40"
           >
-            {generatingAll ? 'Generating…' : `Generate All${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
+            {generatingAll && <span className="w-1.5 h-1.5 rounded-full bg-ink tally" />}
+            {generatingAll ? 'Generating' : `Generate all${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
           </button>
         </div>
       </div>
 
       {/* ── Film Strip ── */}
       {scenes.length > 0 && (
-        <div className="shrink-0 border-b border-white/5" style={{ backgroundColor: '#050510' }}>
+        <div className="shrink-0 border-b border-white/10 bg-ink">
           <FilmStrip
             scenes={scenes}
             selectedId={selectedSceneId}
@@ -501,32 +506,44 @@ export default function Editor() {
         </div>
       )}
 
-      {/* ── Model competition stats bar ── */}
-      {fluxAvailable && (
-        <div className="shrink-0 px-4 py-1.5 flex items-center gap-4 border-b border-white/5 text-xs"
-          style={{ backgroundColor: 'rgba(5,5,16,0.9)' }}>
-          <span className="text-slate-600 uppercase tracking-widest">AI Competition</span>
-          {geminiWins > 0 && (
-            <span className="flex items-center gap-1.5 text-violet-400">
-              <span className="w-2 h-2 rounded-full bg-violet-500" />
-              Gemini won {geminiWins} scene{geminiWins !== 1 ? 's' : ''}
+      {/* ── Who won what ── */}
+      {winEntries.length > 0 && (
+        <div className="shrink-0 px-4 sm:px-6 py-1.5 flex items-center gap-x-5 gap-y-1 flex-wrap border-b border-white/10 bg-ink">
+          <span className="mono-label">Winners</span>
+          {winEntries.map(([label, n]) => (
+            <span key={label} className="flex items-center gap-1.5 text-xs text-slate-300">
+              <span className="w-1.5 h-1.5 bg-violet-600" />
+              {label} <span className="font-mono text-slate-500">×{n}</span>
             </span>
-          )}
-          {fluxWins > 0 && (
-            <span className="flex items-center gap-1.5 text-amber-400">
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
-              FLUX won {fluxWins} scene{fluxWins !== 1 ? 's' : ''}
-            </span>
-          )}
-          <span className="text-slate-600 ml-auto">Best result auto-selected by consistency score</span>
+          ))}
+          <span className="mono-label ml-auto hidden md:block !text-slate-600">Highest score is kept per scene</span>
         </div>
       )}
+
+      {/* ── Panel switcher (phones and tablets) ── */}
+      <div role="tablist" className="lg:hidden flex shrink-0 border-b border-white/10 bg-panel">
+        {([['cast', `Cast (${characters.length})`], ['script', `Script (${scenes.length})`], ['frames', `Frames (${generatedCount})`]] as const).map(([id, label]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={mobilePanel === id}
+            onClick={() => setMobilePanel(id)}
+            className={`relative flex-1 py-2.5 text-sm transition-colors ${mobilePanel === id ? 'text-slate-100' : 'text-slate-500'}`}
+          >
+            {label}
+            <span
+              className="absolute inset-x-3 bottom-0 h-0.5 bg-violet-600 origin-center transition-transform duration-300"
+              style={{ transform: mobilePanel === id ? 'scaleX(1)' : 'scaleX(0)' }}
+            />
+          </button>
+        ))}
+      </div>
 
       {/* ── Three-panel layout ── */}
       <div className="flex-1 flex overflow-hidden min-h-0">
 
         {/* Characters */}
-        <div className="w-64 xl:w-72 border-r border-white/5 flex flex-col overflow-hidden shrink-0" style={{ backgroundColor: '#0a0a20' }}>
+        <div className={`${mobilePanel === 'cast' ? 'flex' : 'hidden'} lg:flex w-full lg:w-64 xl:w-72 border-r border-white/10 flex-col overflow-hidden shrink-0 bg-panel`}>
           <div className="flex-1 overflow-y-auto p-4">
             <CharacterPanel
               characters={characters}
@@ -538,22 +555,22 @@ export default function Editor() {
         </div>
 
         {/* Scene text editor */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ backgroundColor: '#07071a' }}>
-          <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between shrink-0">
-            <h2 className="font-semibold text-slate-200 text-sm">Story Scenes</h2>
+        <div className={`${mobilePanel === 'script' ? 'flex' : 'hidden'} lg:flex flex-1 flex-col overflow-hidden min-w-0 bg-ink`}>
+          <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between gap-2 flex-wrap shrink-0">
+            <h2 className="mono-label !text-slate-300">Script</h2>
             <div className="flex items-center gap-2">
-              <button onClick={() => setShowStoryModal(true)} className="btn-secondary text-xs py-1.5 px-3">
-                ✨ Generate Story
+              <button onClick={() => setShowStoryModal(true)} className="btn-secondary text-xs !py-1.5 !px-3">
+                Write with AI
               </button>
-              <button onClick={handleParseScenes} className="btn-secondary text-xs py-1.5 px-3">
-                Parse & Save
+              <button onClick={handleParseScenes} className="btn-secondary text-xs !py-1.5 !px-3">
+                Save scenes
               </button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
             <div>
-              <label className="block text-xs text-slate-500 mb-2 uppercase tracking-wide">
-                Each line → one scene
+              <label className="block mono-label mb-2">
+                One line per scene
               </label>
               <textarea
                 value={storyText}
@@ -566,7 +583,7 @@ export default function Editor() {
             </div>
             {scenes.length > 0 ? (
               <div>
-                <p className="text-xs text-slate-600 mb-2 uppercase tracking-wide">
+                <p className="mono-label mb-2">
                   {scenes.length} saved scene{scenes.length !== 1 ? 's' : ''}
                 </p>
                 <SceneList
@@ -576,9 +593,10 @@ export default function Editor() {
                 />
               </div>
             ) : (
-              <div className="glass-card p-6 text-center">
-                <p className="text-slate-500 text-sm">
-                  Write your story above, then click <strong className="text-slate-400">Parse & Save</strong>.
+              <div className="border border-dashed border-white/15 p-6">
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Write one scene per line, or press <strong className="text-slate-200">Write with AI</strong> to
+                  draft them from a single sentence. Then press <strong className="text-slate-200">Save scenes</strong>.
                 </p>
               </div>
             )}
@@ -586,7 +604,7 @@ export default function Editor() {
         </div>
 
         {/* Results grid */}
-        <div className="w-72 xl:w-80 border-l border-white/5 flex flex-col overflow-hidden shrink-0" style={{ backgroundColor: '#0a0a20' }}>
+        <div className={`${mobilePanel === 'frames' ? 'flex' : 'hidden'} lg:flex w-full lg:w-72 xl:w-80 border-l border-white/10 flex-col overflow-hidden shrink-0 bg-panel`}>
           <div className="flex-1 overflow-y-auto p-4">
             <ResultsGrid scenes={scenes} onImageClick={setSelectedScene} />
           </div>
@@ -608,55 +626,54 @@ export default function Editor() {
             />
             {/* Consistency badge */}
             {presentScene.consistency_score !== null && (
-              <div className={`absolute top-4 right-4 text-sm font-bold px-3 py-1 rounded-full ${
-                (presentScene.consistency_score ?? 0) >= 85 ? 'bg-emerald-500 text-white' :
-                (presentScene.consistency_score ?? 0) >= 70 ? 'bg-yellow-500 text-black' :
-                'bg-orange-500 text-white'
-              }`}>
-                {presentScene.consistency_score}% consistent
+              <div className="absolute top-4 right-4 mono-label !text-ink bg-paper px-2.5 py-1">
+                {presentScene.consistency_score}% match
               </div>
             )}
           </div>
 
           {/* Bottom controls */}
-          <div className="shrink-0 px-8 py-5 flex items-center justify-between gap-4 border-t border-white/10">
+          <div className="shrink-0 px-4 sm:px-8 py-5 flex items-center justify-between gap-4 border-t border-white/10">
             <button
               onClick={() => setPresentIndex(i => Math.max(i - 1, 0))}
               disabled={presentIndex === 0}
-              className="text-white/60 hover:text-white disabled:opacity-20 transition-colors text-2xl px-3"
+              aria-label="Previous scene"
+              className="w-10 h-10 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-20 transition-colors"
             >
-              ←
+              <svg className="w-5 h-5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M13 8H3M7 4L3 8l4 4" /></svg>
             </button>
             <div className="flex-1 text-center">
-              <p className="text-white/50 text-xs uppercase tracking-widest mb-1">
-                Scene {presentScene.scene_number} of {generatedScenes.length}
+              <p className="mono-label mb-1.5">
+                Frame {String(presentScene.scene_number).padStart(2, '0')} / {String(generatedScenes.length).padStart(2, '0')}
               </p>
-              <p className="text-white/80 text-sm max-w-2xl mx-auto">{presentScene.story_text || presentScene.prompt}</p>
+              <p className="text-white/85 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">{presentScene.story_text || presentScene.prompt}</p>
             </div>
             <button
               onClick={() => setPresentIndex(i => Math.min(i + 1, generatedScenes.length - 1))}
               disabled={presentIndex >= generatedScenes.length - 1}
-              className="text-white/60 hover:text-white disabled:opacity-20 transition-colors text-2xl px-3"
+              aria-label="Next scene"
+              className="w-10 h-10 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-20 transition-colors"
             >
-              →
+              <svg className="w-5 h-5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
             </button>
           </div>
 
           {/* Close button */}
           <button
             onClick={() => setPresentMode(false)}
-            className="absolute top-4 left-4 text-white/40 hover:text-white/90 transition-colors text-xs uppercase tracking-widest"
+            className="absolute top-4 left-4 mono-label hover:!text-white transition-colors"
           >
-            ESC ✕
+            Esc · Close
           </button>
 
-          {/* Scene dots */}
-          <div className="absolute bottom-20 left-0 right-0 flex justify-center gap-1.5">
+          {/* Progress ticks */}
+          <div className="absolute bottom-24 left-0 right-0 flex justify-center gap-1.5">
             {generatedScenes.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setPresentIndex(i)}
-                className={`w-1.5 h-1.5 rounded-full transition-all ${i === presentIndex ? 'bg-white w-4' : 'bg-white/30'}`}
+                aria-label={`Go to frame ${i + 1}`}
+                className={`h-0.5 transition-all duration-300 ${i === presentIndex ? 'bg-violet-600 w-8' : 'bg-white/25 w-4 hover:bg-white/50'}`}
               />
             ))}
           </div>
@@ -693,10 +710,10 @@ export default function Editor() {
                 <div className="mt-3 flex items-center gap-3">
                   <img
                     src={charForm.base_image ? `data:${charForm.mime_type};base64,${charForm.base_image}` : charForm.preview_url}
-                    alt="Preview" className="w-16 h-16 rounded-xl object-cover border border-white/10"
+                    alt="Preview" className="w-16 h-16 rounded-md object-cover border border-white/10"
                   />
                   <div>
-                    <p className="text-xs text-emerald-400 mb-1">✓ DNA will be extracted</p>
+                    <p className="text-xs text-emerald-400 mb-1">Visual DNA will be extracted</p>
                     <button onClick={() => setCharForm({ ...charForm, base_image: '', preview_url: '', mime_type: 'image/jpeg' })}
                       className="text-xs text-red-400 hover:text-red-300">Remove</button>
                   </div>
@@ -715,7 +732,7 @@ export default function Editor() {
 
       {/* ── Generate Story Modal ── */}
       {showStoryModal && (
-        <Modal title="Generate Story" onClose={() => setShowStoryModal(false)}>
+        <Modal title="Write the story with AI" onClose={() => setShowStoryModal(false)}>
           <div className="space-y-4">
             <div>
               <label className="block text-sm text-slate-400 mb-1.5">Story idea</label>
@@ -760,7 +777,7 @@ export default function Editor() {
       {showParseConfirm && (
         <Modal title="Replace existing scenes?" onClose={() => setShowParseConfirm(false)}>
           <p className="text-slate-400 mb-6">
-            Some scenes have generated images. Parsing will <strong className="text-red-400">permanently delete all current scenes and generated images</strong>.
+            Some scenes already have generated images. Saving will <strong className="text-red-400">permanently delete all current scenes and generated images</strong>.
           </p>
           <div className="flex justify-end gap-3">
             <button onClick={() => setShowParseConfirm(false)} className="btn-secondary">Cancel</button>
@@ -789,20 +806,34 @@ export default function Editor() {
             <p className="text-slate-400 text-sm">
               Export {generatedCount} scene{generatedCount !== 1 ? 's' : ''} as a storyboard PDF.
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="PDF layout">
               {([
-                { f: 'cinema' as PdfFormat, label: 'Cinema', emoji: '🎬', desc: 'Landscape · Image left, text right' },
-                { f: 'comic'  as PdfFormat, label: 'Comic',  emoji: '📖', desc: 'Portrait · Image top, text below' },
-              ]).map(({ f, label, emoji, desc }) => (
-                <button key={f} onClick={() => setPdfFormat(f)}
-                  className={`p-4 rounded-xl border text-left transition-all ${
+                { f: 'cinema' as PdfFormat, label: 'Cinema', desc: 'Landscape. Image left, text right.' },
+                { f: 'comic'  as PdfFormat, label: 'Comic',  desc: 'Portrait. Image on top, text below.' },
+              ]).map(({ f, label, desc }) => (
+                <button key={f} onClick={() => setPdfFormat(f)} role="radio" aria-checked={pdfFormat === f}
+                  className={`p-4 border text-left transition-colors ${
                     pdfFormat === f
-                      ? 'border-violet-500/60 bg-violet-600/10 text-violet-300'
-                      : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/20'
+                      ? 'border-violet-600 bg-violet-600/10 text-slate-100'
+                      : 'border-white/15 text-slate-400 hover:border-white/40'
                   }`}>
-                  <div className="text-2xl mb-1">{emoji}</div>
-                  <div className="font-medium text-sm">{label}</div>
-                  <div className="text-xs opacity-60 mt-0.5">{desc}</div>
+                  <svg className="h-10 mb-3" viewBox={f === 'cinema' ? '0 0 56 40' : '0 0 32 40'} fill="none" aria-hidden="true">
+                    {f === 'cinema' ? (
+                      <>
+                        <rect x="1" y="1" width="54" height="38" stroke="currentColor" strokeWidth="1.5" />
+                        <rect x="5" y="5" width="30" height="30" fill="currentColor" opacity="0.35" />
+                        <path d="M40 8h11M40 14h11M40 20h8" stroke="currentColor" strokeWidth="1.5" />
+                      </>
+                    ) : (
+                      <>
+                        <rect x="1" y="1" width="30" height="38" stroke="currentColor" strokeWidth="1.5" />
+                        <rect x="5" y="5" width="22" height="20" fill="currentColor" opacity="0.35" />
+                        <path d="M5 30h22M5 34h14" stroke="currentColor" strokeWidth="1.5" />
+                      </>
+                    )}
+                  </svg>
+                  <div className="font-medium text-sm text-slate-100">{label}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{desc}</div>
                 </button>
               ))}
             </div>
@@ -817,22 +848,6 @@ export default function Editor() {
       )}
 
       <ImageModal scene={selectedScene} onClose={() => setSelectedScene(null)} projectName={project?.name} />
-    </div>
-  );
-}
-
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
-      onClick={onClose}>
-      <div className="glass-card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-white/5">
-          <h3 className="font-semibold text-slate-200">{title}</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors">✕</button>
-        </div>
-        <div className="p-5">{children}</div>
-      </div>
     </div>
   );
 }

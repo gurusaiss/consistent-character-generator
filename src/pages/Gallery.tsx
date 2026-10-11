@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { api } from '../services/api';
 import type { Project, Scene } from '../types';
 import ImageModal from '../components/ImageModal';
+import { ScoreBadge, ModelBadge } from '../components/Badges';
 
 interface GalleryItem {
   scene: Scene;
@@ -48,18 +49,21 @@ export default function Gallery() {
       const projectList = await api.projects.list();
       setProjects(projectList);
 
-      const allItems: GalleryItem[] = [];
-      for (const project of projectList) {
-        try {
-          const scenes = await api.scenes.list(project.id);
-          for (const scene of scenes.filter((s) => s.status === 'success' && s.generated_image_url)) {
-            allItems.push({ scene, projectName: project.name, projectId: project.id });
+      // Fetch every project's scenes in parallel; a project that fails to load
+      // is skipped rather than aborting the whole gallery.
+      const perProject = await Promise.all(
+        projectList.map(async (project) => {
+          try {
+            const scenes = await api.scenes.list(project.id);
+            return scenes
+              .filter((s) => s.status === 'success' && s.generated_image_url)
+              .map((scene) => ({ scene, projectName: project.name, projectId: project.id }));
+          } catch {
+            return [] as GalleryItem[];
           }
-        } catch {
-          // Skip projects whose scenes fail to load — don't abort the whole gallery
-        }
-      }
-      setItems(allItems);
+        }),
+      );
+      setItems(perProject.flat());
     } catch (err: any) {
       toast.error('Failed to load gallery: ' + err.message);
     } finally {
@@ -77,31 +81,25 @@ export default function Gallery() {
     : null;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 pb-6 mb-8 border-b border-white/10">
         <div>
-          <h1 className="text-3xl font-bold gradient-text">Gallery</h1>
-          <p className="text-slate-400 mt-1">
-            {filtered.length} image{filtered.length !== 1 ? 's' : ''}
-            {avgConsistency !== null && (
-              <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                avgConsistency >= 85 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25' :
-                avgConsistency >= 70 ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/25' :
-                'bg-orange-500/15 text-orange-400 border border-orange-500/25'
-              }`}>
-                ~{avgConsistency}% avg consistency
-              </span>
-            )}
+          <p className="mono-label mb-3">
+            {String(filtered.length).padStart(2, '0')} frame{filtered.length !== 1 ? 's' : ''}
+            {avgConsistency !== null && ` · ${avgConsistency}% average match`}
           </p>
+          <h1 className="font-display text-4xl sm:text-5xl text-slate-100 leading-none" style={{ fontVariationSettings: "'opsz' 96", fontWeight: 500 }}>
+            Gallery
+          </h1>
         </div>
         {projects.length > 0 && (
           <select
             value={filterProject}
             onChange={(e) => setFilterProject(e.target.value)}
             aria-label="Filter gallery by project"
-            className="input-dark max-w-xs"
+            className="input-dark sm:!w-64 !py-2 text-sm cursor-pointer"
           >
-            <option value="all">All Projects</option>
+            <option value="all">All projects</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -110,30 +108,25 @@ export default function Gallery() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-24" role="status" aria-label="Loading gallery">
-          <svg className="w-8 h-8 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
+        <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4" role="status" aria-label="Loading gallery">
+          {[180, 260, 220, 300, 200, 240, 280, 190].map((h, i) => (
+            <div key={i} className="frame break-inside-avoid bg-white/[0.04] animate-pulse" style={{ height: h }} aria-hidden="true" />
+          ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-24 glass-card">
-          <div className="w-20 h-20 rounded-2xl bg-cyan-600/10 border border-cyan-500/20 flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-cyan-500/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-slate-200 mb-2">No images yet</h3>
-          <p className="text-slate-500 text-sm">
-            {filterProject !== 'all'
-              ? 'No images generated for this project yet'
-              : projects.length === 0
-                ? 'Create a storyboard project first, then generate scenes to fill your gallery'
-                : 'Generate some scenes in the editor to see images here'}
+        <div className="border border-white/10 p-10 sm:p-14">
+          <p className="mono-label mb-4">Nothing to show</p>
+          <h3 className="font-display text-3xl sm:text-4xl text-slate-100 leading-tight max-w-xl" style={{ fontWeight: 500 }}>
+            {filterProject !== 'all' ? 'No finished frames in this project yet.' : 'Finished frames will collect here.'}
+          </h3>
+          <p className="text-slate-400 mt-3 max-w-md leading-relaxed">
+            {projects.length === 0
+              ? 'Create a project first, then generate scenes to fill the gallery.'
+              : 'Generate scenes in the editor and they show up in this view.'}
           </p>
           {filterProject === 'all' && (
-            <button onClick={() => navigate('/dashboard')} className="btn-primary mt-6">
-              {projects.length === 0 ? 'Create First Project' : 'Go to My Storyboards'}
+            <button onClick={() => navigate('/dashboard')} className="btn-primary mt-7">
+              {projects.length === 0 ? 'Create a project' : 'Go to projects'}
             </button>
           )}
         </div>
@@ -142,61 +135,39 @@ export default function Gallery() {
           {filtered.map(({ scene, projectName, projectId }) => (
             <div
               key={scene.id}
-              className="glass-card overflow-hidden group cursor-pointer hover:border-violet-500/30 transition-all duration-200 break-inside-avoid"
+              className="frame overflow-hidden group cursor-pointer transition-colors duration-200 hover:border-white/25 break-inside-avoid"
               onClick={() => setSelectedItem({ scene, projectName, projectId })}
             >
-              <div className="relative">
+              <div className="relative overflow-hidden">
                 <img
                   src={scene.generated_image_url}
                   alt={`${projectName} — scene ${scene.scene_number}${scene.prompt ? `: ${scene.prompt}` : ''}`}
                   loading="lazy"
                   decoding="async"
-                  className="w-full"
+                  className="w-full transition-transform duration-700 ease-out group-hover:scale-[1.03]"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
-                    <div>
-                      <p className="text-white text-xs font-medium">{projectName}</p>
-                      <p className="text-white/70 text-xs">Scene {scene.scene_number}</p>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        downloadImage(scene.generated_image_url, `${projectName}-scene-${scene.scene_number}.png`);
-                      }}
-                      aria-label={`Download ${projectName} scene ${scene.scene_number}`}
-                      className="bg-violet-600/80 hover:bg-violet-600 text-white text-xs px-2.5 py-1 rounded-lg transition-colors"
-                    >
-                      ↓
-                    </button>
-                  </div>
+                <div className="absolute top-2 left-2 flex items-center gap-1">
+                  <ScoreBadge score={scene.consistency_score} />
+                  <ModelBadge model={scene.model_used} />
                 </div>
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 backdrop-blur text-xs text-white px-2 py-0.5 rounded-full">
-                  View
-                </div>
-                {/* Consistency + model badges (always visible) */}
-                <div className="absolute top-2 left-2 flex items-center gap-1.5">
-                  {scene.consistency_score !== null && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full backdrop-blur ${
-                      scene.consistency_score >= 85 ? 'bg-emerald-500/85 text-white' :
-                      scene.consistency_score >= 70 ? 'bg-yellow-500/85 text-black' :
-                      scene.consistency_score >= 55 ? 'bg-orange-500/85 text-white' :
-                      'bg-red-500/85 text-white'
-                    }`}>
-                      {scene.consistency_score}%
-                    </span>
-                  )}
-                  {scene.model_used && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full backdrop-blur ${
-                      scene.model_used === 'flux' ? 'bg-amber-500/85 text-black' : 'bg-violet-600/85 text-white'
-                    }`}>
-                      {scene.model_used === 'flux' ? '⚡' : '🟣'}
-                    </span>
-                  )}
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 px-3 py-2 bg-ink/95 border-t border-white/10 translate-y-full group-hover:translate-y-0 group-focus-within:translate-y-0 transition-transform duration-300 ease-out">
+                  <span className="text-xs text-slate-300 truncate">
+                    {projectName} <span className="font-mono text-slate-500">· {String(scene.scene_number).padStart(2, '0')}</span>
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadImage(scene.generated_image_url, `${projectName}-scene-${scene.scene_number}.png`);
+                    }}
+                    aria-label={`Download ${projectName} scene ${scene.scene_number}`}
+                    className="shrink-0 text-xs text-violet-500 hover:text-violet-400 font-semibold"
+                  >
+                    Download
+                  </button>
                 </div>
               </div>
-              <div className="px-3 py-2">
-                <p className="text-xs text-slate-500 line-clamp-1">{scene.prompt}</p>
+              <div className="px-3 py-2.5">
+                <p className="text-xs text-slate-400 line-clamp-2 leading-snug">{scene.story_text || scene.prompt}</p>
               </div>
             </div>
           ))}

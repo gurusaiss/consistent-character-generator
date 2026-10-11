@@ -2,6 +2,20 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 
+export function Wordmark({ className = '' }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-2.5 ${className}`}>
+      <svg className="w-6 h-6 shrink-0" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M5 11V5h6M21 5h6v6M27 21v6h-6M11 27H5v-6" stroke="#ff5a2c" strokeWidth="2.5" />
+        <circle cx="16" cy="16" r="3" fill="#ece5d8" />
+      </svg>
+      <span className="font-display text-xl leading-none text-slate-100" style={{ fontVariationSettings: "'opsz' 48" }}>
+        Consistent<span className="text-violet-600">AI</span>
+      </span>
+    </span>
+  );
+}
+
 export default function Navbar() {
   const { user, usage, signOut } = useAuth();
   const navigate = useNavigate();
@@ -16,71 +30,76 @@ export default function Navbar() {
     }
   }
 
-  const creditsColor =
-    usage == null ? 'text-slate-500' :
-    usage.remaining <= 5 ? 'text-red-400' :
-    usage.remaining <= 10 ? 'text-amber-400' :
-    'text-emerald-400';
+  const low = usage != null && usage.remaining <= 5;
+  const pct = usage ? Math.max(0, Math.min(100, (usage.remaining / usage.limit) * 100)) : 0;
+
+  // When signed in, the wordmark already goes home, so drop the Home link on
+  // narrow screens to keep the bar from overflowing.
+  const links = [
+    { to: '/', label: 'Home', hideOnPhone: !!user },
+    ...(user ? [
+      { to: '/dashboard', label: 'Projects', hideOnPhone: false },
+      { to: '/gallery', label: 'Gallery', hideOnPhone: false },
+    ] : []),
+  ];
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-white/5" style={{ backgroundColor: 'rgba(7,7,26,0.85)', backdropFilter: 'blur(16px)' }}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <NavLink to="/" className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-          </div>
-          <span className="font-bold text-lg gradient-text">ConsistentAI</span>
+    <nav className="sticky top-0 z-50 border-b border-white/10 bg-ink/95">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
+        <NavLink to="/" aria-label="ConsistentAI home">
+          <Wordmark />
         </NavLink>
 
-        <div className="flex items-center gap-1">
-          {[
-            { to: '/', label: 'Home' },
-            ...(user ? [
-              { to: '/dashboard', label: 'Dashboard' },
-              { to: '/gallery', label: 'Gallery' },
-            ] : []),
-          ].map(({ to, label }) => (
+        <div className="flex items-center gap-1 sm:gap-2">
+          {links.map(({ to, label, hideOnPhone }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'bg-violet-600/20 text-violet-400 border border-violet-500/20'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                `relative px-2 sm:px-3 py-4 text-sm transition-colors duration-200 ${hideOnPhone ? 'hidden sm:block' : ''} ${
+                  isActive ? 'text-slate-100' : 'text-slate-400 hover:text-slate-100'
                 }`
               }
             >
-              {label}
+              {({ isActive }) => (
+                <>
+                  {label}
+                  <span
+                    className="absolute left-2.5 right-2.5 -bottom-px h-0.5 bg-violet-600 origin-left transition-transform duration-300"
+                    style={{ transform: isActive ? 'scaleX(1)' : 'scaleX(0)' }}
+                  />
+                </>
+              )}
             </NavLink>
           ))}
 
           {user ? (
-            <div className="flex items-center gap-2 ml-2">
+            <div className="flex items-center gap-3 ml-1 sm:ml-3 pl-3 sm:pl-4 border-l border-white/10">
               {usage !== null && (
                 <div
                   title={`${usage.used} of ${usage.limit} generations used`}
-                  className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 ${creditsColor}`}
+                  className="hidden sm:block w-36"
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                  </svg>
-                  <span>{usage.remaining} / {usage.limit}</span>
+                  <div className={`mono-label flex justify-between gap-3 ${low ? '!text-red-400' : ''}`}>
+                    <span>Credits</span>
+                    <span>{usage.remaining}/{usage.limit}</span>
+                  </div>
+                  <div className="h-[3px] mt-1.5 bg-white/10 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${low ? 'bg-red-500' : 'bg-violet-600'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
                 </div>
               )}
-              <span className="text-slate-500 text-xs hidden lg:block truncate max-w-[120px]">
-                {user.email}
-              </span>
-              <button onClick={handleSignOut} className="btn-secondary text-sm py-1.5 px-3">
-                Sign Out
+              <button onClick={handleSignOut} className="text-sm text-slate-400 hover:text-slate-100 link-underline whitespace-nowrap">
+                Sign out
               </button>
             </div>
           ) : (
-            <NavLink to="/auth" className="btn-primary text-sm py-1.5 px-4 ml-2">
-              Sign In
+            <NavLink to="/auth" className="btn-primary text-sm !py-1.5 !px-4 ml-2">
+              Sign in
             </NavLink>
           )}
         </div>
